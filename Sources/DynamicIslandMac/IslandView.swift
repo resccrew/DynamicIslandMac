@@ -22,7 +22,7 @@ struct IslandView: View {
     private var islandSize: CGSize {
         settings.islandSize(
             state: model.state,
-            hasContent: model.hasContent,
+            hasContent: model.isIslandVisible,
             notch: ScreenNotch.size()
         )
     }
@@ -41,7 +41,7 @@ struct IslandView: View {
             } else if model.isExpanded {
                 expandedContent
                     .transition(.opacity)
-            } else if model.hasContent {
+            } else if model.isIslandVisible {
                 collapsedContent
                     .transition(.opacity)
             }
@@ -59,13 +59,26 @@ struct IslandView: View {
     /// hardware notch does.
     private var shape: NotchShape {
         NotchShape(
-            // Idle sits exactly inside the notch, so the outward flares are
-            // suppressed — otherwise they'd stick out as black wings beside it.
+            // The real hardware notch meets the top bezel at a flush square
+            // corner — no flare. The concave flare only belongs to states
+            // wider than the physical notch (collapsed/expanded), where it
+            // blends the extra width back into the screen edge; forcing it
+            // on idle drew a curve the actual cutout doesn't have.
             topFillet: model.state == .hidden ? 0 : settings.fillet,
+            // Idle also needs its own, much tighter corner: the real notch's
+            // bottom corners are far less rounded than the collapsed pill's,
+            // and reusing collapsedBottomRadius there leaves the actual
+            // hardware notch peeking out past our softer curve.
             bottomRadius: model.isExpanded
                 ? settings.expandedBottomRadius
-                : settings.collapsedBottomRadius,
-            bottomExponent: settings.bottomExponent,
+                : model.state == .hidden
+                    ? settings.idleBottomRadius
+                    : settings.collapsedBottomRadius,
+            // The squircle exponent tuned for the collapsed pill's large
+            // radius reads as an almost-square chamfer at idle's tiny
+            // radius — topExponent is already tuned near-circular, so idle
+            // borrows it for a corner that actually looks rounded.
+            bottomExponent: model.state == .hidden ? settings.topExponent : settings.bottomExponent,
             topExponent: settings.topExponent
         )
     }
@@ -89,50 +102,36 @@ struct IslandView: View {
     // MARK: - Expanded
 
     private var expandedContent: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .top, spacing: 13) {
+        VStack(spacing: 18) {
+            HStack(spacing: 16) {
                 artworkView(size: settings.expandedArtwork)
 
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(model.title.isEmpty ? "Nothing playing" : model.title)
-                        .font(.system(size: settings.titleFontSize, weight: .bold))
-                        .foregroundColor(.white)
-                        .lineLimit(1)
-                    Text(model.artist)
-                        .font(.system(size: settings.artistFontSize, weight: .regular))
-                        .foregroundColor(.white.opacity(0.45))
-                        .lineLimit(1)
+                VStack(alignment: .leading, spacing: 14) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(model.title.isEmpty ? "Nothing playing" : model.title)
+                            .font(.system(size: settings.titleFontSize, weight: .semibold))
+                            .foregroundColor(.white)
+                            .lineLimit(1)
+                        Text(model.artist)
+                            .font(.system(size: settings.artistFontSize, weight: .regular))
+                            .foregroundColor(.white.opacity(0.65))
+                            .lineLimit(1)
+                    }
+
+                    controlsRow
                 }
-                .padding(.top, 3)
 
-                Spacer(minLength: 6)
-
-                EqualizerView(
-                    isPlaying: model.isPlaying,
-                    color: model.accent,
-                    barWidth: 2,
-                    maxHeight: 12
-                )
-                .padding(.top, 6)
+                Spacer(minLength: 0)
             }
 
             progressRow
-                .padding(.top, 16)
-
-            controlsRow
-                .padding(.top, 12)
         }
         .padding(.horizontal, settings.expandedPadding + settings.fillet)
         .padding(.top, settings.expandedTopPadding)
     }
 
     private var progressRow: some View {
-        HStack(spacing: 11) {
-            Text(formatTime(model.position))
-                .font(.system(size: 11, weight: .medium))
-                .foregroundColor(.white.opacity(0.4))
-                .monospacedDigit()
-
+        VStack(spacing: 8) {
             GeometryReader { proxy in
                 ZStack(alignment: .leading) {
                     Capsule().fill(Color.white.opacity(0.22))
@@ -143,44 +142,51 @@ struct IslandView: View {
             }
             .frame(height: 4)
 
-            Text("-\(formatTime(max(0, model.duration - model.position)))")
-                .font(.system(size: 11, weight: .medium))
-                .foregroundColor(.white.opacity(0.4))
-                .monospacedDigit()
+            HStack {
+                Text(formatTime(model.position))
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(.white.opacity(0.4))
+                    .monospacedDigit()
+                Spacer(minLength: 0)
+                Text("-\(formatTime(max(0, model.duration - model.position)))")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(.white.opacity(0.4))
+                    .monospacedDigit()
+            }
         }
     }
 
     private var controlsRow: some View {
-        HStack(spacing: 0) {
-            controlButton("arrow.up.forward.app", size: 17, opacity: 0.95) { model.openPlayer() }
-            Spacer(minLength: 0)
-            controlButton("backward.fill", size: 17, opacity: 0.95) { model.skipPrevious() }
-            Spacer(minLength: 0)
-            controlButton(model.isPlaying ? "pause.fill" : "play.fill", size: 20, opacity: 1) {
-                model.togglePlayPause()
+        HStack(spacing: 24) {
+            Button {
+                model.skipPrevious()
+            } label: {
+                Image(systemName: "backward.end")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.65))
             }
-            Spacer(minLength: 0)
-            controlButton("forward.fill", size: 17, opacity: 0.95) { model.skipNext() }
-            Spacer(minLength: 0)
-            controlButton("airplayaudio", size: 16, opacity: 0.95) { AudioOutputs.showPicker() }
-        }
-    }
+            .buttonStyle(.plain)
 
-    private func controlButton(
-        _ systemName: String,
-        size: CGFloat,
-        opacity: Double,
-        action: @escaping () -> Void
-    ) -> some View {
-        MediaButton(
-            systemName: systemName,
-            size: size,
-            opacity: opacity,
-            width: 38,
-            height: 30,
-            highlightDiameter: 34,
-            action: action
-        )
+            Button {
+                model.togglePlayPause()
+            } label: {
+                Image(systemName: model.isPlaying ? "pause.fill" : "play.fill")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(.black)
+                    .frame(width: 44, height: 44)
+                    .background(Circle().fill(.white))
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                model.skipNext()
+            } label: {
+                Image(systemName: "forward.end")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.65))
+            }
+            .buttonStyle(.plain)
+        }
     }
 
     private var progressFraction: CGFloat {

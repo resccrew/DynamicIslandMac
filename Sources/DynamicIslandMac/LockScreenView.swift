@@ -70,39 +70,93 @@ struct LockScreenView: View {
     // MARK: - Compact card
 
     private var compactCard: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 12) {
-                artwork(size: 48)
+        VStack(spacing: 18) {
+            HStack(spacing: 16) {
+                artwork(size: 84)
                     .onTapGesture { model.toggleLockArt() }
 
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(model.title)
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(palette.primary)
-                        .lineLimit(1)
-                    Text(model.artist)
-                        .font(.system(size: 13))
-                        .foregroundStyle(palette.secondary)
-                        .lineLimit(1)
+                VStack(alignment: .leading, spacing: 14) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(model.title)
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundStyle(palette.primary)
+                            .lineLimit(1)
+                        Text(model.artist)
+                            .font(.system(size: 14))
+                            .foregroundStyle(palette.secondary)
+                            .lineLimit(1)
+                    }
+
+                    compactControlsRow
                 }
 
-                Spacer(minLength: 8)
-
-                EqualizerView(
-                    isPlaying: model.isPlaying,
-                    color: palette.primary.opacity(0.85),
-                    barWidth: 2,
-                    maxHeight: 13
-                )
+                Spacer(minLength: 0)
             }
 
-            progressRow
-            controlsRow
+            compactProgressSection
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 18)
+        .padding(24)
         .frame(width: settings.lockScreenWidth)
         .background(cardBackground)
+    }
+
+    private var compactControlsRow: some View {
+        HStack(spacing: 24) {
+            Button {
+                model.skipPrevious()
+            } label: {
+                Image(systemName: "backward.end")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(palette.secondary)
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                model.togglePlayPause()
+            } label: {
+                Image(systemName: model.isPlaying ? "pause.fill" : "play.fill")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(palette.background)
+                    .frame(width: 44, height: 44)
+                    .background(Circle().fill(palette.primary))
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                model.skipNext()
+            } label: {
+                Image(systemName: "forward.end")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(palette.secondary)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private var compactProgressSection: some View {
+        VStack(spacing: 8) {
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(palette.trackBackground)
+                    Capsule()
+                        .fill(palette.trackFill)
+                        .frame(width: proxy.size.width * progressFraction)
+                }
+            }
+            .frame(height: 4)
+
+            HStack {
+                Text(formatTime(model.position))
+                    .font(.system(size: 12))
+                    .foregroundStyle(palette.secondary)
+                    .monospacedDigit()
+                Spacer(minLength: 0)
+                Text("-\(formatTime(max(0, model.duration - model.position)))")
+                    .font(.system(size: 12))
+                    .foregroundStyle(palette.secondary)
+                    .monospacedDigit()
+            }
+        }
     }
 
     // MARK: - Expanded artwork
@@ -188,23 +242,23 @@ struct LockScreenView: View {
             artwork(size: settings.lockScreenArtSize)
                 .onTapGesture { model.toggleLockArt() }
 
-            VStack(spacing: 12) {
-                VStack(spacing: 1) {
+            VStack(spacing: 16) {
+                VStack(spacing: 2) {
                     Text(model.title)
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(palette.primary)
                         .lineLimit(1)
                     Text(model.artist)
-                        .font(.system(size: 12))
+                        .font(.system(size: 14))
                         .foregroundStyle(palette.secondary)
                         .lineLimit(1)
                 }
 
-                progressRow
-                controlsRow
+                compactProgressSection
+                compactControlsRow
             }
-            .padding(.horizontal, 18)
-            .padding(.vertical, 14)
+            .padding(.horizontal, 24)
+            .padding(.vertical, 20)
             .frame(width: settings.lockScreenArtSize * 0.78)
             .background(cardBackground)
 
@@ -228,55 +282,6 @@ struct LockScreenView: View {
 
     // MARK: - Shared pieces
 
-    private var progressRow: some View {
-        HStack(spacing: 10) {
-            Text(formatTime(model.position))
-                .font(.system(size: 10, weight: .medium))
-                .monospacedDigit()
-                .foregroundStyle(palette.secondary)
-
-            GeometryReader { proxy in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(palette.trackBackground)
-                    Capsule()
-                        .fill(palette.trackFill)
-                        .frame(width: proxy.size.width * progressFraction)
-                }
-            }
-            .frame(height: 4)
-
-            Text("-\(formatTime(max(0, model.duration - model.position)))")
-                .font(.system(size: 10, weight: .medium))
-                .monospacedDigit()
-                .foregroundStyle(palette.secondary)
-        }
-    }
-
-    private var controlsRow: some View {
-        HStack(spacing: 0) {
-            button("arrow.up.forward.app", size: 16, opacity: 0.95) { model.openPlayer() }
-            Spacer(minLength: 0)
-            button("backward.fill", size: 17, opacity: 0.95) { model.skipPrevious() }
-            Spacer(minLength: 0)
-            button(model.isPlaying ? "pause.fill" : "play.fill", size: 20, opacity: 1) {
-                model.togglePlayPause()
-            }
-            Spacer(minLength: 0)
-            button("forward.fill", size: 17, opacity: 0.95) { model.skipNext() }
-            Spacer(minLength: 0)
-            button("airplayaudio", size: 16, opacity: 0.95) { AudioOutputs.showPicker() }
-        }
-    }
-
-    private func button(
-        _ name: String,
-        size: CGFloat,
-        opacity: Double,
-        action: @escaping () -> Void
-    ) -> some View {
-        MediaButton(systemName: name, size: size, opacity: opacity, tint: palette.primary, action: action)
-    }
-
     private func artwork(size: CGFloat) -> some View {
         FlipArtwork(image: model.artwork, trackKey: model.trackKey, size: size, cornerRatio: 0.16)
             .shadow(color: .black.opacity(0.35), radius: 18, y: 8)
@@ -284,11 +289,11 @@ struct LockScreenView: View {
 
     /// Colours for the card content — swaps with `lockCardLightTheme` so the
     /// same layout reads correctly against either background.
-    private var palette: (primary: Color, secondary: Color, trackBackground: Color, trackFill: Color) {
+    private var palette: (primary: Color, secondary: Color, trackBackground: Color, trackFill: Color, background: Color) {
         if settings.lockCardLightTheme {
-            (.black.opacity(0.85), .black.opacity(0.45), .black.opacity(0.1), .black.opacity(0.75))
+            (.black.opacity(0.85), .black.opacity(0.45), .black.opacity(0.1), .black.opacity(0.75), .white)
         } else {
-            (.white, .white.opacity(0.65), .white.opacity(0.25), .white.opacity(0.9))
+            (.white, .white.opacity(0.65), .white.opacity(0.25), .white.opacity(0.9), .black)
         }
     }
 
@@ -302,10 +307,11 @@ struct LockScreenView: View {
                     .shadow(color: .black.opacity(0.25), radius: 20, y: 8)
             } else {
                 RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .fill(.ultraThinMaterial)
+                    .fill(Color(white: 0.1))
+                    .shadow(color: .black.opacity(0.4), radius: 20, y: 8)
                     .overlay(
                         RoundedRectangle(cornerRadius: 22, style: .continuous)
-                            .strokeBorder(.white.opacity(0.14), lineWidth: 1)
+                            .strokeBorder(.white.opacity(0.08), lineWidth: 1)
                     )
             }
         }

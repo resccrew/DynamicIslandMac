@@ -79,7 +79,19 @@ final class IslandViewModel: ObservableObject {
     /// lyric on the beat, so playback time is advanced locally between polls.
     private var positionTicker: Timer?
 
+    /// A track is loaded, regardless of play state — used by the lock screen,
+    /// which (like iOS) keeps showing a paused track rather than hiding it.
     var hasContent: Bool { !title.isEmpty }
+
+    /// Whether the island itself should be showing.
+    ///
+    /// Deliberately *not* the same as `hasContent`: Spotify's AppleScript has
+    /// no real "stopped" state — its `stop` command just pauses, and a paused
+    /// track keeps reporting its title indefinitely. Gating on title alone
+    /// meant the island stayed visible, poking out past the real notch, for as
+    /// long as anything had ever played that session. Requiring `isPlaying`
+    /// too means it actually goes flush the moment playback stops.
+    var isIslandVisible: Bool { isPlaying && !title.isEmpty }
 
     /// Changes exactly once per track, driving the artwork flip.
     var trackKey: String { "\(title)|\(artist)" }
@@ -107,7 +119,7 @@ final class IslandViewModel: ObservableObject {
     /// playing there is no card to show, so the click is ignored. No haptic
     /// here — the only tap belongs to entering the island.
     func tap() {
-        guard hasContent else { return }
+        guard isIslandVisible else { return }
         isPinnedOpen.toggle()
         sync()
     }
@@ -254,13 +266,13 @@ final class IslandViewModel: ObservableObject {
             // A just-connected device takes precedence over playback, so the
             // island can announce it even with nothing playing.
             next = .notice
-        } else if hasContent && isPinnedOpen {
+        } else if isIslandVisible && isPinnedOpen {
             next = .expanded
         } else if isHovering {
             // Hover still responds with nothing playing, so the island shows it
             // is alive — just with an empty body.
             next = .peek
-        } else if !hasContent {
+        } else if !isIslandVisible {
             next = .hidden
         } else {
             next = .collapsed

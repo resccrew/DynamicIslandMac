@@ -19,6 +19,21 @@ private final class ClickThroughHostingView<Content: View>: NSHostingView<Conten
 
     required init(rootView: Content) {
         super.init(rootView: rootView)
+        makeLayerTransparent()
+    }
+
+    /// `NSHostingView`'s backing `CALayer` defaults to opaque even inside a
+    /// window explicitly marked `isOpaque = false`. An opaque layer tells the
+    /// compositor it can skip alpha blending and paint the *entire* layer
+    /// bounds solid — which for this 333×205 fixed-size container means the
+    /// whole box shows filled black on screen, regardless of how small the
+    /// clipped shape SwiftUI actually draws inside it. This only shows up in
+    /// real on-screen compositing, not in a captured image of the view's own
+    /// backing buffer, which is what made it look fine in every offline check.
+    private func makeLayerTransparent() {
+        wantsLayer = true
+        layer?.isOpaque = false
+        layer?.backgroundColor = NSColor.clear.cgColor
     }
 
     @available(*, unavailable)
@@ -98,7 +113,7 @@ final class IslandWindowController: NSWindowController {
         let container = panel.frame.size
         let island = settings.islandSize(
             state: model.state,
-            hasContent: model.hasContent,
+            hasContent: model.isIslandVisible,
             notch: ScreenNotch.size(for: panel.screen)
         )
         return CGRect(

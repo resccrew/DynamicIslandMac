@@ -15,6 +15,9 @@ final class IslandSettings: ObservableObject {
     @Published var fillet: Double { didSet { persist() } }
     @Published var collapsedBottomRadius: Double { didSet { persist() } }
     @Published var expandedBottomRadius: Double { didSet { persist() } }
+    /// Much tighter than the collapsed/expanded radii — matches the real
+    /// notch's own corner, since idle is meant to sit flush inside it.
+    @Published var idleBottomRadius: Double { didSet { persist() } }
     @Published var bottomExponent: Double { didSet { persist() } }
     @Published var topExponent: Double { didSet { persist() } }
 
@@ -69,6 +72,7 @@ final class IslandSettings: ObservableObject {
         static let fillet = 13.0
         static let collapsedBottomRadius = 26.0
         static let expandedBottomRadius = 34.0
+        static let idleBottomRadius = 9.0
         static let bottomExponent = 5.0
         static let topExponent = 2.2
 
@@ -85,14 +89,14 @@ final class IslandSettings: ObservableObject {
         static let peekHeightGrowth = 5.0
         static let animationDuration = 0.32
         static let showShadow = false
-        static let idleHeightExtra = 3.0
+        static let idleHeightExtra = 0.0
 
         static let lockScreenEnabled = true
         static let lockScreenWidth = 380.0
         static let lockScreenArtSize = 360.0
         /// Below centre, so the card sits just above the avatar and password field.
         static let lockScreenOffsetY = 230.0
-        static let lockCardLightTheme = false
+        static let lockCardLightTheme = true
         static let lyricsEnabled = true
         static let preventSleepOnLock = false
         static let preventSleepMinutes = 10.0
@@ -111,6 +115,7 @@ final class IslandSettings: ObservableObject {
         fillet = Self.read("fillet", Defaults.fillet)
         collapsedBottomRadius = Self.read("collapsedBottomRadius", Defaults.collapsedBottomRadius)
         expandedBottomRadius = Self.read("expandedBottomRadius", Defaults.expandedBottomRadius)
+        idleBottomRadius = Self.read("idleBottomRadius", Defaults.idleBottomRadius)
         bottomExponent = Self.read("bottomExponent", Defaults.bottomExponent)
         topExponent = Self.read("topExponent", Defaults.topExponent)
 
@@ -227,6 +232,7 @@ final class IslandSettings: ObservableObject {
         fillet = Defaults.fillet
         collapsedBottomRadius = Defaults.collapsedBottomRadius
         expandedBottomRadius = Defaults.expandedBottomRadius
+        idleBottomRadius = Defaults.idleBottomRadius
         bottomExponent = Defaults.bottomExponent
         topExponent = Defaults.topExponent
         collapsedArtwork = Defaults.collapsedArtwork
@@ -269,6 +275,7 @@ final class IslandSettings: ObservableObject {
         d.set(fillet, forKey: "fillet")
         d.set(collapsedBottomRadius, forKey: "collapsedBottomRadius")
         d.set(expandedBottomRadius, forKey: "expandedBottomRadius")
+        d.set(idleBottomRadius, forKey: "idleBottomRadius")
         d.set(bottomExponent, forKey: "bottomExponent")
         d.set(topExponent, forKey: "topExponent")
         d.set(collapsedArtwork, forKey: "collapsedArtwork")

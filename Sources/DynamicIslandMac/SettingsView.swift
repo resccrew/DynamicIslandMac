@@ -85,9 +85,13 @@ struct SettingsView: View {
                 slider("Ширина карточки", $settings.lockScreenWidth, 240...600)
                 slider("Обложка развёрнутая", $settings.lockScreenArtSize, 200...560)
                 slider("Сдвиг по вертикали", $settings.lockScreenOffsetY, -350...350)
-                Toggle("Светлая карточка", isOn: $settings.lockCardLightTheme)
-                    .font(.system(size: 12))
-                hint("Белая непрозрачная карточка с тёмным текстом вместо тёмного стекла.")
+                Picker("Тема", selection: $settings.lockCardLightTheme) {
+                    Text("Светлая").tag(true)
+                    Text("Темная").tag(false)
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 200)
+                hint("Светлая — белая непрозрачная, Темная — темная непрозрачная.")
                 hint("Клик по обложке увеличивает её, затем кнопка «Текст» открывает караоке.")
             }
 

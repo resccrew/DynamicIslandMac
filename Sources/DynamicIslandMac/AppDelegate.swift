@@ -10,7 +10,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var islandController: IslandWindowController?
     private var lockScreenController: LockScreenWindowController?
-    private var agentStatusController: AgentStatusWindowController?
     private var settingsController: SettingsWindowController?
     private var statusItem: NSStatusItem?
     private var cancellables = Set<AnyCancellable>()
@@ -20,7 +19,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // there is anything playing.
         islandController = IslandWindowController(model: model)
         lockScreenController = LockScreenWindowController(model: model)
-        agentStatusController = AgentStatusWindowController()
 
         poller.start { [weak self] snapshot in
             self?.model.apply(snapshot)

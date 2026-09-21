@@ -22,6 +22,11 @@ private final class LockHostingView<Content: View>: NSHostingView<Content> {
 
     required init(rootView: Content) {
         super.init(rootView: rootView)
+        // See the matching note on ClickThroughHostingView: an NSHostingView's
+        // layer defaults to opaque regardless of the window's own setting.
+        wantsLayer = true
+        layer?.isOpaque = false
+        layer?.backgroundColor = NSColor.clear.cgColor
     }
 
     @available(*, unavailable)
