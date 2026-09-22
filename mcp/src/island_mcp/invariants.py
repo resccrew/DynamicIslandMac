@@ -39,8 +39,12 @@ def _state_machine(s: dict[str, Any]) -> list[str]:
             out.append("island should be visible (playing/timer) but state=hidden")
         if not s.get("isIslandVisible") and state not in ("hidden",):
             out.append(f"nothing to show (paused/empty, no hover) but state={state} — island should hide")
-    if state == "expanded" and not s.get("isIslandVisible"):
+    # A paused track may keep a click-opened card under the pointer (so its
+    # play button stays reachable); only an empty title has nothing to show.
+    if state == "expanded" and not s.get("isIslandVisible") and not s.get("hasContent"):
         out.append("state=expanded with nothing to show")
+    if state == "expanded" and not s.get("isIslandVisible") and not hovering:
+        out.append("paused card is still expanded after the pointer left")
     return out
 
 

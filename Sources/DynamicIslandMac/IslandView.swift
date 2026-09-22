@@ -43,7 +43,14 @@ struct IslandView: View {
                 .onTapGesture { model.tap() }
 
             if let title = model.glanceTitle {
-                GlanceView(title: title, subtitle: model.glanceSubtitle, accent: model.accent)
+                GlanceView(
+                    title: title,
+                    subtitle: model.glanceSubtitle,
+                    symbol: model.glanceSymbol,
+                    accent: model.accent
+                )
+                    // Keep the text clear of the camera cutout.
+                    .padding(.top, settings.collapsedHeight)
                     .id(title)
                     .transition(.opacity)
             } else if model.isTimerActive {

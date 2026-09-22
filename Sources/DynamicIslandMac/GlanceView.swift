@@ -6,6 +6,7 @@ import SwiftUI
 struct GlanceView: View {
     let title: String
     let subtitle: String?
+    var symbol = "calendar"
     let accent: Color
 
     @State private var iconIn = false
@@ -13,7 +14,7 @@ struct GlanceView: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: "calendar")
+            Image(systemName: symbol)
                 .symbolRenderingMode(.hierarchical)
                 .foregroundStyle(.white)
                 .font(.system(size: 18, weight: .medium))
