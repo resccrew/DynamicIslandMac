@@ -8,6 +8,14 @@ struct IslandView: View {
         VStack(spacing: 0) {
             island
                 .frame(width: islandSize.width, height: islandSize.height)
+                // A pause (or resume) flips `isIslandVisible` and the frame
+                // snaps to its new size on the same spring as every other
+                // state change, which reads as an instant cut rather than a
+                // disappearance. Fading opacity on a slightly slower, easing
+                // curve — independent of that spring — makes it read as the
+                // island dissolving instead of the shape just shrinking.
+                .opacity(model.state == .hidden ? 0 : 1)
+                .animation(.easeOut(duration: 0.35), value: model.state == .hidden)
                 .onHover { hovering in
                     model.hover(hovering)
                 }
@@ -34,10 +42,18 @@ struct IslandView: View {
                 .contentShape(shape)
                 .onTapGesture { model.tap() }
 
-            if let notice = model.notice {
-                NoticeView(notice: notice, accent: model.accent)
-                    .id(notice)
+            if let title = model.glanceTitle {
+                GlanceView(title: title, subtitle: model.glanceSubtitle, accent: model.accent)
+                    .id(title)
                     .transition(.opacity)
+            } else if model.isTimerActive {
+                if model.isExpanded {
+                    timerExpandedContent
+                        .transition(.opacity)
+                } else {
+                    timerCollapsedContent
+                        .transition(.opacity)
+                }
             } else if model.isExpanded {
                 expandedContent
                     .transition(.opacity)
@@ -47,6 +63,14 @@ struct IslandView: View {
             }
         }
         .clipShape(shape)
+        // Forces a full re-rasterization on every change instead of an
+        // incremental CALayer-mask update. Without this, the shape can be
+        // pixel-correct in a fresh screen capture while the *live* on-screen
+        // compositing still shows a stale mask from an earlier path shape
+        // (e.g. square corners left over from a different state) — a repeat
+        // of the layer-caching class of bug already hit once in this file
+        // (see ClickThroughHostingView's makeLayerTransparent comment).
+        .drawingGroup()
     }
 
     /// Fast and smooth: a short, well-damped spring so it settles without
@@ -58,28 +82,32 @@ struct IslandView: View {
     /// Hangs from the top edge of the display and blends into it, the way the
     /// hardware notch does.
     private var shape: NotchShape {
-        NotchShape(
-            // The real hardware notch meets the top bezel at a flush square
-            // corner — no flare. The concave flare only belongs to states
-            // wider than the physical notch (collapsed/expanded), where it
-            // blends the extra width back into the screen edge; forcing it
-            // on idle drew a curve the actual cutout doesn't have.
+        // Idle also needs its own, much tighter corner: the real notch's
+        // bottom corners are far less rounded than the collapsed pill's,
+        // and reusing collapsedBottomRadius there leaves the actual
+        // hardware notch peeking out past our softer curve.
+        let bottomRadius: CGFloat = model.isExpanded
+            ? settings.expandedBottomRadius
+            : model.state == .hidden
+                ? settings.idleBottomRadius
+                : settings.collapsedBottomRadius
+
+        return NotchShape(
+            // Same concave flare on every visible state, expanded included —
+            // the card grows out of the screen edge the way the collapsed
+            // pill already does, instead of reading as a separate floating
+            // box with its own rounded top.
             topFillet: model.state == .hidden ? 0 : settings.fillet,
-            // Idle also needs its own, much tighter corner: the real notch's
-            // bottom corners are far less rounded than the collapsed pill's,
-            // and reusing collapsedBottomRadius there leaves the actual
-            // hardware notch peeking out past our softer curve.
-            bottomRadius: model.isExpanded
-                ? settings.expandedBottomRadius
-                : model.state == .hidden
-                    ? settings.idleBottomRadius
-                    : settings.collapsedBottomRadius,
+            bottomRadius: bottomRadius,
             // The squircle exponent tuned for the collapsed pill's large
             // radius reads as an almost-square chamfer at idle's tiny
-            // radius — topExponent is already tuned near-circular, so idle
-            // borrows it for a corner that actually looks rounded.
-            bottomExponent: model.state == .hidden ? settings.topExponent : settings.bottomExponent,
-            topExponent: settings.topExponent
+            // radius. When expanded, we use a perfectly circular exponent (2.2)
+            // on ALL corners so it looks like a smooth pill, not a box.
+            bottomExponent: model.state == .hidden ? settings.topExponent : (model.isExpanded ? settings.topExponent : settings.bottomExponent),
+            topExponent: settings.topExponent,
+            // Every visible state keeps the flush notch-continuation look —
+            // expanded no longer breaks from it with an ordinary rounded top.
+            topIsConvex: false
         )
     }
 
@@ -99,15 +127,70 @@ struct IslandView: View {
         .padding(.horizontal, settings.collapsedPadding + settings.fillet)
     }
 
+    // MARK: - Timer
+
+    private var timerCollapsedContent: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "timer")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.white.opacity(0.75))
+            Spacer(minLength: 0)
+            Text(formatTime(model.timerRemaining ?? 0))
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(.white)
+                .monospacedDigit()
+        }
+        .padding(.horizontal, settings.collapsedPadding + settings.fillet)
+    }
+
+    private var timerExpandedContent: some View {
+        VStack(spacing: 14) {
+            Text(formatTime(model.timerRemaining ?? 0))
+                .font(.system(size: 34, weight: .semibold))
+                .foregroundColor(.white)
+                .monospacedDigit()
+
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.white.opacity(0.22))
+                    Capsule()
+                        .fill(Color.white.opacity(0.85))
+                        .frame(width: proxy.size.width * timerFraction)
+                }
+            }
+            .frame(height: 4)
+
+            Button {
+                model.cancelTimer()
+            } label: {
+                Text("Отменить")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.75))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 6)
+                    .background(Capsule().fill(Color.white.opacity(0.12)))
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, settings.expandedPadding + settings.fillet)
+        .padding(.top, settings.expandedTopPadding)
+        .padding(.bottom, settings.expandedTopPadding)
+    }
+
+    private var timerFraction: CGFloat {
+        guard model.timerTotal > 0, let remaining = model.timerRemaining else { return 0 }
+        return CGFloat(min(1, max(0, 1 - remaining / model.timerTotal)))
+    }
+
     // MARK: - Expanded
 
     private var expandedContent: some View {
-        VStack(spacing: 18) {
-            HStack(spacing: 16) {
+        VStack(spacing: 10) {
+            HStack(spacing: 12) {
                 artworkView(size: settings.expandedArtwork)
 
-                VStack(alignment: .leading, spacing: 14) {
-                    VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 1) {
                         Text(model.title.isEmpty ? "Nothing playing" : model.title)
                             .font(.system(size: settings.titleFontSize, weight: .semibold))
                             .foregroundColor(.white)
@@ -128,10 +211,11 @@ struct IslandView: View {
         }
         .padding(.horizontal, settings.expandedPadding + settings.fillet)
         .padding(.top, settings.expandedTopPadding)
+        .padding(.bottom, settings.expandedTopPadding)
     }
 
     private var progressRow: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 6) {
             GeometryReader { proxy in
                 ZStack(alignment: .leading) {
                     Capsule().fill(Color.white.opacity(0.22))
@@ -156,57 +240,6 @@ struct IslandView: View {
         }
     }
 
-    private var controlsRow: some View {
-        HStack(spacing: 24) {
-            Button {
-                AudioOutputs.showPicker()
-            } label: {
-                Image(systemName: "speaker.wave.2.circle")
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.65))
-            }
-            .buttonStyle(.plain)
-
-            Button {
-                model.skipPrevious()
-            } label: {
-                Image(systemName: "backward.end")
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.65))
-            }
-            .buttonStyle(.plain)
-
-            Button {
-                model.togglePlayPause()
-            } label: {
-                Image(systemName: model.isPlaying ? "pause.fill" : "play.fill")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(.black)
-                    .frame(width: 44, height: 44)
-                    .background(Circle().fill(.white))
-            }
-            .buttonStyle(.plain)
-
-            Button {
-                model.skipNext()
-            } label: {
-                Image(systemName: "forward.end")
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.65))
-            }
-            .buttonStyle(.plain)
-
-            Button {
-                model.openPlayer()
-            } label: {
-                Image(systemName: "arrow.up.forward.app")
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.65))
-            }
-            .buttonStyle(.plain)
-        }
-    }
-
     private var progressFraction: CGFloat {
         guard model.duration > 0 else { return 0 }
         return CGFloat(min(1, max(0, model.position / model.duration)))
@@ -216,6 +249,57 @@ struct IslandView: View {
         guard seconds.isFinite, seconds >= 0 else { return "0:00" }
         let total = Int(seconds)
         return String(format: "%d:%02d", total / 60, total % 60)
+    }
+
+    private var controlsRow: some View {
+        HStack(spacing: 14) {
+            Button {
+                AudioOutputs.showPicker()
+            } label: {
+                Image(systemName: "speaker.wave.2.circle")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.65))
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                model.skipPrevious()
+            } label: {
+                Image(systemName: "backward.end")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.65))
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                model.togglePlayPause()
+            } label: {
+                Image(systemName: model.isPlaying ? "pause.fill" : "play.fill")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(.black)
+                    .frame(width: 32, height: 32)
+                    .background(Circle().fill(.white))
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                model.skipNext()
+            } label: {
+                Image(systemName: "forward.end")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.65))
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                model.openPlayer()
+            } label: {
+                Image(systemName: "arrow.up.forward.app")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.65))
+            }
+            .buttonStyle(.plain)
+        }
     }
 
     private func artworkView(size: CGFloat) -> some View {

@@ -127,12 +127,6 @@ struct SettingsView: View {
                 hint("Выключена — остров сливается с чёрной рамкой экрана.")
             }
 
-            section("Устройства") {
-                Toggle("Показывать подключение наушников и зарядки", isOn: $settings.deviceNoticesEnabled)
-                    .font(.system(size: 12))
-                hint("Остров ненадолго показывает имя устройства и его заряд.")
-            }
-
             section("Меню-бар") {
                 Toggle("Значок в меню-баре", isOn: $settings.showStatusIcon)
                     .font(.system(size: 12))

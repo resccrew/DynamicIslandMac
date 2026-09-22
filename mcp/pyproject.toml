@@ -1,0 +1,27 @@
+[project]
+name = "island-mcp"
+version = "0.1.0"
+description = "Debug/QA MCP server for DynamicIslandMac: state, injection, screenshots, invariants"
+authors = [
+    { name = "resccrew", email = "pravorovnik@gmail.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "mcp[cli]>=2.2.0",
+    "pillow>=12.3.0",
+]
+
+[project.scripts]
+island-mcp = "island_mcp.server:main"
+
+[build-system]
+requires = ["uv_build>=0.10.0,<0.11.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

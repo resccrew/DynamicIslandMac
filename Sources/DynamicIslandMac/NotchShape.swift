@@ -22,6 +22,12 @@ struct NotchShape: Shape {
     /// Lamé exponent for the concave fillets. Kept near-circular: the blend is
     /// small, and pushing it far from 2 makes the flare read as a step.
     var topExponent: CGFloat = 2.2
+    /// The collapsed pill and idle state read fine flush against the screen
+    /// edge (`false`, the default) — that's the notch-continuation look. The
+    /// expanded card is much taller and, at that scale, the same flush top
+    /// just reads as a flat, unrounded corner rather than a subtle blend, so
+    /// it opts into an ordinary convex top corner instead.
+    var topIsConvex: Bool = false
 
     var animatableData: AnimatablePair<CGFloat, CGFloat> {
         get { AnimatablePair(topFillet, bottomRadius) }
@@ -32,6 +38,77 @@ struct NotchShape: Shape {
     }
 
     func path(in rect: CGRect) -> Path {
+        topIsConvex ? convexPath(in: rect) : concavePath(in: rect)
+    }
+
+    /// Ordinary rounded-rect corners on all four sides (used by the expanded card).
+    private func convexPath(in rect: CGRect) -> Path {
+        var path = Path()
+
+        var topRadius = max(0, min(topFillet, rect.width / 2))
+        var bottomR = max(0, min(bottomRadius, rect.width / 2))
+        let verticalOverflow = topRadius + bottomR
+        if verticalOverflow > rect.height, verticalOverflow > 0 {
+            let scale = rect.height / verticalOverflow
+            topRadius *= scale
+            bottomR *= scale
+        }
+
+        let left = rect.minX
+        let right = rect.maxX
+        let top = rect.minY
+        let bottom = rect.maxY
+
+        path.move(to: CGPoint(x: left, y: top + topRadius))
+
+        appendLame(
+            to: &path,
+            center: CGPoint(x: left + topRadius, y: top + topRadius),
+            radius: topRadius,
+            from: CGVector(dx: -1, dy: 0),
+            to: CGVector(dx: 0, dy: -1),
+            exponent: topExponent
+        )
+
+        path.addLine(to: CGPoint(x: right - topRadius, y: top))
+
+        appendLame(
+            to: &path,
+            center: CGPoint(x: right - topRadius, y: top + topRadius),
+            radius: topRadius,
+            from: CGVector(dx: 0, dy: -1),
+            to: CGVector(dx: 1, dy: 0),
+            exponent: topExponent
+        )
+
+        path.addLine(to: CGPoint(x: right, y: bottom - bottomR))
+
+        appendLame(
+            to: &path,
+            center: CGPoint(x: right - bottomR, y: bottom - bottomR),
+            radius: bottomR,
+            from: CGVector(dx: 1, dy: 0),
+            to: CGVector(dx: 0, dy: 1),
+            exponent: bottomExponent
+        )
+
+        path.addLine(to: CGPoint(x: left + bottomR, y: bottom))
+
+        appendLame(
+            to: &path,
+            center: CGPoint(x: left + bottomR, y: bottom - bottomR),
+            radius: bottomR,
+            from: CGVector(dx: 0, dy: 1),
+            to: CGVector(dx: -1, dy: 0),
+            exponent: bottomExponent
+        )
+
+        path.closeSubpath()
+        return path
+    }
+
+    /// Flush concave top blending into the screen edge (collapsed pill, idle).
+    private func concavePath(in rect: CGRect) -> Path {
         var path = Path()
 
         let fillet = max(0, min(topFillet, rect.width / 2, rect.height))

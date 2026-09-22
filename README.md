@@ -29,9 +29,19 @@ Requires Xcode (not just the Command Line Tools) — the lock-screen overlay and
 - `AppleScriptNowPlaying` / `NowPlayingPoller` — reads Spotify/Music over
   AppleScript (no public "now playing" API exists for third-party apps)
 - `LyricsProvider` — synced lyrics from the open [LRCLIB](https://lrclib.net) API
-- `DeviceMonitors` / `BluetoothDeviceInfo` — charger and Bluetooth audio
-  connect/disconnect notices, battery level and exact model via
-  `system_profiler SPBluetoothDataType`
+
+## QA / debug MCP
+
+Debug builds (`./build_app.sh debug`) start a local control server on `127.0.0.1:47800`
+(`DebugControlServer.swift`, compiled only under `#if DEBUG` — release builds don't contain it).
+The `mcp/` folder is an MCP server that lets Claude drive and check the running app:
+read state, inject a fake track, simulate hover/tap/glance/timer/lock-screen preview,
+screenshot the island (including bursts for animations), and check invariants.
+
+```sh
+cd mcp && uv run pytest -q                      # MCP tests
+claude mcp add --scope user island -- uv --directory /path/to/DynamicIslandMac/mcp run island-mcp
+```
 
 ## Known limitations
 
