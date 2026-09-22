@@ -19,7 +19,8 @@ final class IslandViewModel: ObservableObject {
     @Published var title: String = ""
     @Published var artist: String = ""
     @Published var artwork: NSImage? = nil
-    @Published var accent: Color = Color(red: 0.80, green: 0.70, blue: 0.58)
+    static let defaultAccent = Color(red: 0.80, green: 0.70, blue: 0.58)
+    @Published var accent: Color = IslandViewModel.defaultAccent
     @Published var isPlaying: Bool = false
     @Published var position: Double = 0
     @Published var duration: Double = 0
@@ -225,13 +226,17 @@ final class IslandViewModel: ObservableObject {
             loadLyrics(title: snapshot.title, artist: snapshot.artist, duration: snapshot.duration)
         }
         updatePositionTicker()
+        // A new track must never keep the previous song's cover or tint; within
+        // one track a missing cover just means it has not been fetched yet.
         if let artwork = snapshot.artwork {
             self.artwork = artwork
-        } else if snapshot.title.isEmpty {
+        } else if trackChanged || snapshot.title.isEmpty {
             self.artwork = nil
         }
         if let accent = snapshot.accent {
             self.accent = Color(nsColor: accent)
+        } else if trackChanged {
+            self.accent = Self.defaultAccent
         }
 
         // A track change only swaps the artwork and tint in place; the island
