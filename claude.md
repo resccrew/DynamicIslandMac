@@ -60,9 +60,12 @@ side-проекта — нет опасных force-unwrap, нет пустых 
   коммитом `46d9492`, но README не обновляли).
 - Билд (`swift build -c debug`) зелёный после всех правок.
 
-Осталось, требует продуктового решения (не тронуто намеренно):
-- Мёртвый код: `AudioOutputs.swift` (142 строки, AirPlay-подобный пикер) и
-  `IslandViewModel.openPlayer()` реализованы, но нигде не подключены к UI — подключить или удалить?
+- `AudioOutputs.showPicker()` и `IslandViewModel.openPlayer()` подключены к `controlsRow` в
+  `IslandView` (кнопки по бокам от transport-контролов). Сознательно не продублированы в
+  `LockScreenView` — обе фичи не имеют смысла за экраном блокировки, см. коммит
+  `feat/wire-audio-output-and-open-player`.
+
+Осталось, низкий приоритет (не тронуто намеренно):
 - Дублирование `formatTime`/`progressFraction`/controls между `IslandView` и `LockScreenView` —
   не баг, но правка в одном месте не подхватится в другом.
 
