@@ -65,7 +65,7 @@ final class IslandViewModel: ObservableObject {
             remaining -= 1
             if remaining <= 0 {
                 self.cancelTimer()
-                self.presentGlance(title: "Таймер завершён", subtitle: nil)
+                self.presentGlance(title: "Таймер завершён", subtitle: nil, symbol: "timer")
             } else {
                 self.timerRemaining = remaining
             }
@@ -87,12 +87,15 @@ final class IslandViewModel: ObservableObject {
     /// check instead of a hardware event.
     @Published private(set) var glanceTitle: String?
     @Published private(set) var glanceSubtitle: String?
+    /// SF Symbol for the glance, so a finished timer does not wear a calendar.
+    @Published private(set) var glanceSymbol = "calendar"
     private var glanceTimer: Timer?
 
-    func presentGlance(title: String, subtitle: String?) {
+    func presentGlance(title: String, subtitle: String?, symbol: String = "calendar") {
         glanceTimer?.invalidate()
         glanceTitle = title
         glanceSubtitle = subtitle
+        glanceSymbol = symbol
         Haptics.hover()
         sync()
 
@@ -171,7 +174,8 @@ final class IslandViewModel: ObservableObject {
     /// playing there is no card to show, so the click is ignored. No haptic
     /// here — the only tap belongs to entering the island.
     func tap() {
-        guard isIslandVisible else { return }
+        // An open card stays tappable after a pause, so it can still be closed.
+        guard isIslandVisible || isPinnedOpen else { return }
         isPinnedOpen.toggle()
         sync()
     }
@@ -218,7 +222,11 @@ final class IslandViewModel: ObservableObject {
         title = snapshot.title
         artist = snapshot.artist
         isPlaying = snapshot.isPlaying
-        position = snapshot.position
+        // Players can report a stale position past the end (track boundary,
+        // ads); never show more than the track's length.
+        position = snapshot.duration > 0
+            ? min(max(snapshot.position, 0), snapshot.duration)
+            : max(snapshot.position, 0)
         duration = snapshot.duration
         playerBundleID = snapshot.playerBundleID
 
@@ -293,7 +301,11 @@ final class IslandViewModel: ObservableObject {
         guard positionTicker == nil else { return }
         positionTicker = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { [weak self] _ in
             guard let self, self.isPlaying else { return }
-            self.position += 0.2
+            // The ticker only interpolates between polls; it must not run the
+            // clock past the end while waiting for the next track.
+            self.position = self.duration > 0
+                ? min(self.position + 0.2, self.duration)
+                : self.position + 0.2
         }
     }
 
@@ -322,7 +334,10 @@ final class IslandViewModel: ObservableObject {
             // A calendar glance takes precedence over playback, so the
             // island can show it even with nothing playing.
             next = .glance
-        } else if isIslandVisible && isPinnedOpen {
+        } else if isPinnedOpen && (isIslandVisible || hasContent) {
+            // Pausing from the card's own button must not pull the card, and
+            // the play button with it, out from under the pointer. It closes
+            // on pointer exit like any click-opened island.
             next = .expanded
         } else if isHovering {
             // Hover still responds with nothing playing, so the island shows it

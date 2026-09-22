@@ -191,9 +191,17 @@ final class IslandSettings: ObservableObject {
 
     /// Tied to the collapsed island rather than fixed, so a glance never towers
     /// over the shape it grows out of.
+    /// The glance grows below the notch: its text is wider than the wings
+    /// beside the camera, so a single row at notch height would sit behind it.
     var glanceWindowSize: CGSize {
-        CGSize(width: max(collapsedWidth, 280) + fillet * 2, height: collapsedHeight + 8)
+        CGSize(
+            width: max(collapsedWidth, 280) + fillet * 2,
+            height: collapsedHeight + glanceBodyHeight
+        )
     }
+
+    /// Height of the glance's own row, under the notch-tall strip.
+    let glanceBodyHeight: CGFloat = 46
 
     func islandSize(state: IslandState, hasContent: Bool, notch: CGSize) -> CGSize {
         switch state {
