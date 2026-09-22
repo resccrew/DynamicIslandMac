@@ -159,6 +159,15 @@ struct IslandView: View {
     private var controlsRow: some View {
         HStack(spacing: 24) {
             Button {
+                AudioOutputs.showPicker()
+            } label: {
+                Image(systemName: "speaker.wave.2.circle")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.65))
+            }
+            .buttonStyle(.plain)
+
+            Button {
                 model.skipPrevious()
             } label: {
                 Image(systemName: "backward.end")
@@ -182,6 +191,15 @@ struct IslandView: View {
                 model.skipNext()
             } label: {
                 Image(systemName: "forward.end")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.65))
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                model.openPlayer()
+            } label: {
+                Image(systemName: "arrow.up.forward.app")
                     .font(.system(size: 16, weight: .medium))
                     .foregroundStyle(.white.opacity(0.65))
             }
