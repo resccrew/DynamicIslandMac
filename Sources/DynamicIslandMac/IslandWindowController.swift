@@ -125,3 +125,13 @@ final class IslandWindowController: NSWindowController {
     }
 
 }
+
+#if DEBUG
+extension IslandWindowController {
+    /// The island's current shape in screen coordinates, for the debug server.
+    var debugIslandScreenRect: CGRect? {
+        guard let panel = window else { return nil }
+        return panel.convertToScreen(islandRectInWindow(panel: panel))
+    }
+}
+#endif

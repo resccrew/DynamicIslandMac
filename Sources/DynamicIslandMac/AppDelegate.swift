@@ -12,6 +12,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var settingsController: SettingsWindowController?
     private var statusItem: NSStatusItem?
     private var cancellables = Set<AnyCancellable>()
+    #if DEBUG
+    private var debugServer: DebugControlServer?
+    #endif
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // The controller shows and hides the panel itself, following whether
@@ -19,8 +22,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         islandController = IslandWindowController(model: model)
         lockScreenController = LockScreenWindowController(model: model)
 
+        #if DEBUG
+        debugServer = DebugControlServer(
+            model: model,
+            islandController: islandController,
+            lockController: lockScreenController
+        )
+        debugServer?.start()
+        #endif
 
         poller.start { [weak self] snapshot in
+            #if DEBUG
+            // An injected track must not be overwritten by the real player.
+            if self?.debugServer?.isInjecting == true { return }
+            #endif
             self?.model.apply(snapshot)
         }
 

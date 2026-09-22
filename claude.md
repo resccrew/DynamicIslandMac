@@ -15,7 +15,7 @@
 
 ## Архитектура
 - `AppDelegate` — точка входа. Держит один `IslandViewModel` (источник истины), `NowPlayingPoller`
-  (опрос AppleScript раз в секунду) и `DeviceMonitors` (event-driven, CoreAudio/IOKit).
+  (опрос AppleScript раз в секунду) и, только в DEBUG, `DebugControlServer` (см. раздел про MCP).
 - `IslandViewModel` раздаёt состояние двум независимым window-контроллерам:
   `IslandWindowController` (панель под вырезом) и `LockScreenWindowController`
   (оверлей поверх экрана блокировки через приватный SkyLight — `SkyLightSpace.swift`).
@@ -83,14 +83,101 @@ side-проекта — нет опасных force-unwrap, нет пустых 
 
 Осталось, низкий приоритет (не тронуто намеренно):
 - Дублирование `formatTime`/`progressFraction`/controls между `IslandView` и `LockScreenView` —
-  не баг, но правка в одном месте не подхватится в другом.
+  не баг, но правка в одном месте не подхватится в другом (уже неактуально для `IslandView`,
+  см. ниже — прогресс-бар там убран).
+
+## Форма развёрнутой карточки (2026-09-22, финал — НЕ ломать повторно)
+Несколько итераций (тупиковая ветка с колонкой-календарём внутри карточки, ошибочный перегиб
+в "таблетку"/pill) свелись к следующему, подтверждённому пользователем вживую решению:
+
+- **Верхние углы — та же concave-фаска, что у collapsed pill, на ВСЕХ состояниях, включая
+  expanded.** `NotchShape.topIsConvex` теперь всегда `false` — раньше expanded получал `true`
+  (обычный convex-угол), из-за чего карточка читалась как отдельная плавающая коробка, а не
+  как продолжение выреза экрана. `topFillet` для всех НЕ-hidden состояний = `settings.fillet`
+  (13pt), единообразно. Правка в `IslandView.shape`. **Если понадобится снова трогать верх
+  карточки — сначала посмотреть на collapsed pill живьём, это эталон, копировать его, а не
+  изобретать заново.**
+- Нижние углы — обычный squircle, `expandedBottomRadius = 36pt` на `expandedHeight = 148pt`
+  (радиус явно МЕНЬШЕ половины высоты — попытка сделать радиус ~половину высоты дала "таблетку"
+  вместо скруглённого прямоугольника, пользователь на это резко среагировал: **не увеличивать
+  радиус относительно высоты больше этого без явного запроса**).
+- `expandedWidth = 280pt`, компактно, без пустых зон: артворк 54pt, шрифты 15/12, controlsRow —
+  spacing 14, иконки 13pt, play/pause круг 32pt (было 44). Верх и низ отбиты одинаковым
+  `expandedTopPadding` (12pt).
+- Прогресс-бар (`progressRow`) — оставлен, идёт последней строкой; без него низ карточки читался
+  пустым.
+- Белая обводка (`shape.stroke(...)`) вокруг острова — убрана полностью, ни в каком виде;
+  пользователь явно попросил чисто чёрный без окантовки.
+- **Важно для локальной отладки**: `IslandSettings` читает геометрию из `UserDefaults.standard`
+  с фолбэком на `Defaults` только если ключ отсутствует. На этой машине персист несколько раз
+  тихо подменял новые дефолты старыми значениями между итерациями правки (точный триггер не до
+  конца продиагностирован). Практическое правило: **перед каждым визуальным тестом геометрии
+  острова сначала `defaults delete com.nikita.dynamicislandmac`**, потом пересобрать/перезапустить.
+- Контролы музыкальной карточки (5 иконок, круглая play/pause с белым фоном) по составу/иконкам
+  не трогали.
+
+## Фичи острова помимо Now Playing (2026-09-22)
+Убрано:
+- **Уведомления о зарядке/наушниках** — пользователю не понравилась анимация, убраны целиком:
+  `NoticeView.swift`, `DeviceMonitors.swift`, `BluetoothDeviceInfo.swift` удалены, `IslandState.notice`
+  → переиспользован как `.glance` (см. ниже), `IslandSettings.deviceNoticesEnabled` и связанный
+  Toggle в `SettingsView` удалены, `AppDelegate` больше не создаёт `DeviceMonitors`.
+
+Добавлено — обе фичи занимают тот же footprint острова (то же окно/форма), просто разный контент:
+- **Таймер** (`IslandViewModel.timerRemaining`/`timerTotal`/`startTimer(minutes:)`/`cancelTimer()`) —
+  запускается из меню-бара (пресеты 1/5/10/15/30 мин + «Другое…» через `NSAlert`). Пока активен,
+  вытесняет Now Playing (см. `isTimerActive` в `IslandViewModel.isIslandVisible` и content-selection
+  в `IslandView`): collapsed — иконка+обратный отсчёт, expanded — крупный отсчёт + прогресс-капсула
+  + кнопка «Отменить». По завершении сам себя отменяет и показывает `GlanceView` "Таймер завершён".
+- **Календарь — «ближайшее событие»** (`CalendarGlanceProvider.swift`, `EKEventStore`, один запрос,
+  best-effort/graceful-fallback как у `LyricsProvider`) — по клику в меню-баре показывает
+  `GlanceView` с названием и временем ближайшего события на 4 секунды, тем же transient-механизмом,
+  что раньше был у device-уведомлений (`IslandViewModel.presentGlance`/`glanceTitle`/`glanceTimer`).
+  Если событий нет — глянец "Событий больше нет". Требует `NSCalendarsFullAccessUsageDescription`
+  в `build_app.sh`'s Info.plist (возвращено после того, как было убрано вместе со старой,
+  отменённой веткой календаря-колонки).
+- Приоритет контента при одновременной активности: `glance` (проверка календаря) > `timer` >
+  Now Playing. Раньше на этом месте стоял `notice` с тем же приоритетом — просто заменили источник.
+
+## QA через MCP `island` (2026-09-22)
+Чтобы Claude мог сам гонять и проверять живое приложение.
+
+**App-сторона** — `DebugControlServer.swift`, целиком под `#if DEBUG` (в release-бинаре его нет,
+проверено `strings .build/release/DynamicIslandMac`). HTTP/JSON на `127.0.0.1:47800` через
+`NWListener`, listener на main-очереди → вся работа с моделью на main thread. Лог событий только
+в памяти (кольцевой буфер 300), на диск ничего. Подключение: `AppDelegate` (+ пропуск снапшотов
+поллера, пока `isInjecting`), `IslandWindowController.debugIslandScreenRect` (DEBUG-extension).
+Эндпоинты: `GET /state`, `GET /logs`, `POST /inject/now-playing`, `/inject/clear`,
+`/simulate/hover`, `/simulate/tap`, `/simulate/glance`, `/simulate/timer`, `/simulate/lock-preview`.
+Координаты в `/state` — top-left, points, главный дисплей.
+
+**MCP-сторона** — `mcp/` (Python 3.13, uv, `mcp` SDK, паттерны из `~/telegram-mcp`: Result-типы,
+ничего в stdout). Инструменты: `get_state`, `inject_now_playing`, `clear_injection`, `hover`, `tap`,
+`show_glance`, `start_timer`, `toggle_lock_preview`, `get_logs`, `check_invariants`,
+`screenshot_island` (кроп вокруг панели через `screencapture -R`, burst до 20 кадров ≈ 80мс/кадр),
+`rebuild_and_relaunch` (`./build_app.sh debug`, `pkill -x DynamicIslandMac`, `open`, ждёт `/state`).
+Инварианты (`mcp/src/island_mcp/invariants.py`): `isIslandVisible == (isPlaying && title) || timer`,
+`hasContent == title`, пауза/пусто без hover ⇒ `hidden`, glance ⇒ `state=glance`, окно по центру
+выреза и прижато к верху, форма не шире окна, idle-ширина == ширина выреза, position ≤ duration,
+индекс лирики в диапазоне.
+
+Регистрация: `claude mcp add --scope user island -- uv --directory ~/DynamicIslandMac/mcp run island-mcp`.
+
+Грабли:
+- `rebuild_and_relaunch` пересобирает `build/DynamicIslandMac.app` в DEBUG — это та же копия, что
+  обычно запущена; для обычного использования потом `./build_app.sh` (release).
+- Физический вырез не попадает в скриншот: скрытый остров там выглядит как обои — это норма.
+- `tap`/`hover` подменяют `pointerIsInsideIsland` на `true` (иначе watchdog через 0.1с закрывает
+  карточку, т.к. реальный курсор не над островом); снимается `hover(inside=false)`.
+- Никогда `pkill -f <путь к app>` — матчит и шелл, который его вызвал (убил сам себя при отладке).
 
 ## Зоны ответственности агентов в этом проекте
 - **Planner** — приоритизация находок аудита, разбивка на фичи/фиксы.
 - **Implementer** — фикс регресса в `IslandViewModel`, подключение или удаление мёртвого кода
   (`AudioOutputs`, `openPlayer`), вынос debug-логирования под флаг.
-- **Tester** — для этого проекта нет автоматических тестов (SPM executable target без test target);
-  проверка вручную через `./build_app.sh` + запуск приложения.
+- **Tester** — у Swift-таргета нет unit-тестов; живое приложение проверяется через MCP `island`
+  (`mcp/`, см. раздел «QA через MCP» выше): `check_invariants` после каждого действия + `screenshot_island`.
+  Тесты самого MCP: `cd mcp && uv run pytest -q`.
 - **Critic** — держит в курсе, что `hasContent` vs `isIslandVisible` разведены намеренно, не давать
   повторно смержить их без веской причины.
 - **Documenter** — синхронизировать README с реальным состоянием `Sources/` (сейчас расходится).
