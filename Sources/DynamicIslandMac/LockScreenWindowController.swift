@@ -154,6 +154,7 @@ final class LockScreenWindowController: NSWindowController {
     }
 
     static func log(_ message: String) {
+        #if DEBUG
         let line = "\(Date()) \(message)\n"
         let url = URL(fileURLWithPath: "/tmp/island-lock.log")
         if let handle = try? FileHandle(forWritingTo: url) {
@@ -163,6 +164,7 @@ final class LockScreenWindowController: NSWindowController {
         } else {
             try? line.write(to: url, atomically: true, encoding: .utf8)
         }
+        #endif
     }
 
     /// Shows the overlay without locking, for checking the layout.

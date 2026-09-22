@@ -1,8 +1,8 @@
 # Dynamic Island for Mac
 
 A menu-bar-notch "island" for macOS: Now Playing for Spotify/Apple Music, a
-matching card on the lock screen with karaoke lyrics, device-connected
-notices, and a live status pill for a running Claude Code session.
+matching card on the lock screen with karaoke lyrics, and device-connected
+notices.
 
 No sandboxing, no Developer ID — built to run from source, ad-hoc signed.
 
@@ -32,9 +32,6 @@ Requires Xcode (not just the Command Line Tools) — the lock-screen overlay and
 - `DeviceMonitors` / `BluetoothDeviceInfo` — charger and Bluetooth audio
   connect/disconnect notices, battery level and exact model via
   `system_profiler SPBluetoothDataType`
-- `ClaudeAgentMonitor` — reads Claude Code's own local session transcripts to
-  show a small "is it working right now" status pill; structural only, no
-  conversation content is ever displayed
 
 ## Known limitations
 
