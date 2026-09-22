@@ -54,6 +54,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <true/>
     <key>NSAppleEventsUsageDescription</key>
     <string>Чтобы показывать текущий трек, приложению нужен доступ к Spotify и Music.</string>
+    <key>NSCalendarsFullAccessUsageDescription</key>
+    <string>Чтобы показывать ближайшее событие, приложению нужен доступ к календарю.</string>
 </dict>
 PLIST
 echo "</plist>" >> "$APP/Contents/Info.plist"

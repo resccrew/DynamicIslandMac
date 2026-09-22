@@ -9,8 +9,8 @@ enum IslandState {
     case collapsed
     case peek
     case expanded
-    /// A hardware event taking over the island for a few seconds.
-    case notice
+    /// A calendar glance taking over the island for a few seconds.
+    case glance
 }
 
 final class IslandViewModel: ObservableObject {
@@ -40,18 +40,64 @@ final class IslandViewModel: ObservableObject {
 
     @Published private(set) var lyrics: [LyricLine] = []
 
-    @Published private(set) var notice: DeviceNotice?
-    private var noticeTimer: Timer?
+    // MARK: - Timer
 
-    /// Hardware events win over whatever the island was showing, briefly.
-    func present(_ notice: DeviceNotice) {
-        noticeTimer?.invalidate()
-        self.notice = notice
+    /// A user-started countdown, shown in the island in place of Now Playing
+    /// while it runs — the same footprint, different content, the way a
+    /// Live Activity takes over.
+    @Published private(set) var timerRemaining: TimeInterval?
+    @Published private(set) var timerTotal: TimeInterval = 0
+    private var timerTick: Timer?
+
+    var isTimerActive: Bool { timerRemaining != nil }
+
+    func startTimer(minutes: Double) {
+        let seconds = minutes * 60
+        timerTotal = seconds
+        timerRemaining = seconds
         Haptics.hover()
         sync()
 
-        noticeTimer = Timer.scheduledTimer(withTimeInterval: 3.5, repeats: false) { [weak self] _ in
-            self?.notice = nil
+        timerTick?.invalidate()
+        timerTick = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            guard let self, var remaining = self.timerRemaining else { return }
+            remaining -= 1
+            if remaining <= 0 {
+                self.cancelTimer()
+                self.presentGlance(title: "Таймер завершён", subtitle: nil)
+            } else {
+                self.timerRemaining = remaining
+            }
+        }
+    }
+
+    func cancelTimer() {
+        timerTick?.invalidate()
+        timerTick = nil
+        timerRemaining = nil
+        timerTotal = 0
+        sync()
+    }
+
+    // MARK: - Calendar glance
+
+    /// A brief, dismiss-itself-on-a-timer peek — the same mechanic the old
+    /// device notice used, just repurposed for a manually-triggered calendar
+    /// check instead of a hardware event.
+    @Published private(set) var glanceTitle: String?
+    @Published private(set) var glanceSubtitle: String?
+    private var glanceTimer: Timer?
+
+    func presentGlance(title: String, subtitle: String?) {
+        glanceTimer?.invalidate()
+        glanceTitle = title
+        glanceSubtitle = subtitle
+        Haptics.hover()
+        sync()
+
+        glanceTimer = Timer.scheduledTimer(withTimeInterval: 4, repeats: false) { [weak self] _ in
+            self?.glanceTitle = nil
+            self?.glanceSubtitle = nil
             self?.sync()
         }
     }
@@ -91,7 +137,12 @@ final class IslandViewModel: ObservableObject {
     /// meant the island stayed visible, poking out past the real notch, for as
     /// long as anything had ever played that session. Requiring `isPlaying`
     /// too means it actually goes flush the moment playback stops.
-    var isIslandVisible: Bool { isPlaying && !title.isEmpty }
+    ///
+    /// A running timer is just as valid a reason to be visible as playback —
+    /// it takes over the same footprint (see `isTimerActive` in content
+    /// selection), so it has to be counted here too or the island never
+    /// leaves `.hidden` for a timer started with nothing playing.
+    var isIslandVisible: Bool { (isPlaying && !title.isEmpty) || isTimerActive }
 
     /// Changes exactly once per track, driving the artwork flip.
     var trackKey: String { "\(title)|\(artist)" }
@@ -262,10 +313,10 @@ final class IslandViewModel: ObservableObject {
 
     private func sync() {
         let next: IslandState
-        if notice != nil {
-            // A just-connected device takes precedence over playback, so the
-            // island can announce it even with nothing playing.
-            next = .notice
+        if glanceTitle != nil {
+            // A calendar glance takes precedence over playback, so the
+            // island can show it even with nothing playing.
+            next = .glance
         } else if isIslandVisible && isPinnedOpen {
             next = .expanded
         } else if isHovering {

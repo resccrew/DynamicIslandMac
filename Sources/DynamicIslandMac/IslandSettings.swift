@@ -61,29 +61,28 @@ final class IslandSettings: ObservableObject {
     @Published var showStatusIcon: Bool { didSet { persist() } }
 
     /// Announce headphones and the charger connecting.
-    @Published var deviceNoticesEnabled: Bool { didSet { persist() } }
 
     enum Defaults {
         static let collapsedWidth = 280.0
         static let collapsedHeight = 38.0
-        static let expandedWidth = 307.0
-        static let expandedHeight = 205.0
+        static let expandedWidth = 280.0
+        static let expandedHeight = 148.0
 
         static let fillet = 13.0
         static let collapsedBottomRadius = 26.0
-        static let expandedBottomRadius = 34.0
+        static let expandedBottomRadius = 36.0
         static let idleBottomRadius = 9.0
         static let bottomExponent = 5.0
         static let topExponent = 2.2
 
         static let collapsedArtwork = 26.0
-        static let expandedArtwork = 66.0
+        static let expandedArtwork = 54.0
         static let collapsedPadding = 8.0
-        static let expandedPadding = 18.0
-        static let expandedTopPadding = 13.0
+        static let expandedPadding = 14.0
+        static let expandedTopPadding = 12.0
 
-        static let titleFontSize = 16.0
-        static let artistFontSize = 13.0
+        static let titleFontSize = 15.0
+        static let artistFontSize = 12.0
 
         static let peekWidthGrowth = 18.0
         static let peekHeightGrowth = 5.0
@@ -101,7 +100,6 @@ final class IslandSettings: ObservableObject {
         static let preventSleepOnLock = false
         static let preventSleepMinutes = 10.0
         static let showStatusIcon = true
-        static let deviceNoticesEnabled = true
     }
 
     private var isLoading = true
@@ -146,8 +144,6 @@ final class IslandSettings: ObservableObject {
             ?? Defaults.preventSleepOnLock
         preventSleepMinutes = Self.read("preventSleepMinutes", Defaults.preventSleepMinutes)
         showStatusIcon = UserDefaults.standard.object(forKey: "showStatusIcon") as? Bool ?? Defaults.showStatusIcon
-        deviceNoticesEnabled = UserDefaults.standard.object(forKey: "deviceNoticesEnabled") as? Bool
-            ?? Defaults.deviceNoticesEnabled
 
         isLoading = false
     }
@@ -185,7 +181,7 @@ final class IslandSettings: ObservableObject {
             collapsedWindowSize,
             islandSize(state: .peek, hasContent: true, notch: notch),
             islandSize(state: .peek, hasContent: false, notch: notch),
-            noticeWindowSize,
+            glanceWindowSize,
         ]
         return CGSize(
             width: candidates.map(\.width).max() ?? expandedWindowSize.width,
@@ -193,16 +189,16 @@ final class IslandSettings: ObservableObject {
         )
     }
 
-    /// Tied to the collapsed island rather than fixed, so a notice never towers
+    /// Tied to the collapsed island rather than fixed, so a glance never towers
     /// over the shape it grows out of.
-    var noticeWindowSize: CGSize {
+    var glanceWindowSize: CGSize {
         CGSize(width: max(collapsedWidth, 280) + fillet * 2, height: collapsedHeight + 8)
     }
 
     func islandSize(state: IslandState, hasContent: Bool, notch: CGSize) -> CGSize {
         switch state {
-        case .notice:
-            return noticeWindowSize
+        case .glance:
+            return glanceWindowSize
         case .hidden:
             return idleSize(notch: notch)
         case .collapsed:
@@ -256,7 +252,6 @@ final class IslandSettings: ObservableObject {
         preventSleepOnLock = Defaults.preventSleepOnLock
         preventSleepMinutes = Defaults.preventSleepMinutes
         showStatusIcon = Defaults.showStatusIcon
-        deviceNoticesEnabled = Defaults.deviceNoticesEnabled
         isLoading = false
         persist()
     }
@@ -299,6 +294,5 @@ final class IslandSettings: ObservableObject {
         d.set(preventSleepOnLock, forKey: "preventSleepOnLock")
         d.set(preventSleepMinutes, forKey: "preventSleepMinutes")
         d.set(showStatusIcon, forKey: "showStatusIcon")
-        d.set(deviceNoticesEnabled, forKey: "deviceNoticesEnabled")
     }
 }
