@@ -8,6 +8,14 @@ struct IslandView: View {
         VStack(spacing: 0) {
             island
                 .frame(width: islandSize.width, height: islandSize.height)
+                // A pause (or resume) flips `isIslandVisible` and the frame
+                // snaps to its new size on the same spring as every other
+                // state change, which reads as an instant cut rather than a
+                // disappearance. Fading opacity on a slightly slower, easing
+                // curve — independent of that spring — makes it read as the
+                // island dissolving instead of the shape just shrinking.
+                .opacity(model.state == .hidden ? 0 : 1)
+                .animation(.easeOut(duration: 0.35), value: model.state == .hidden)
                 .onHover { hovering in
                     model.hover(hovering)
                 }
