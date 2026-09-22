@@ -27,6 +27,42 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/DynamicIslandMac"
 cp "$ROOT/Resources/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 
+# System-wide Now Playing (browsers, any media app) goes through the vendored
+# mediaremote-adapter: a small framework that /usr/bin/perl loads, because
+# MediaRemote no longer answers ad-hoc-signed apps. See Vendor/mediaremote-adapter.
+ADAPTER="$ROOT/Vendor/mediaremote-adapter"
+FW="$APP/Contents/Frameworks/MediaRemoteAdapter.framework"
+mkdir -p "$FW/Versions/A/Resources"
+clang -dynamiclib -arch arm64 -arch x86_64 -mmacosx-version-min=14.0 \
+    -fobjc-arc -fvisibility=default -O2 \
+    -I"$ADAPTER/include" -I"$ADAPTER/src" \
+    "$ADAPTER"/src/adapter/*.m "$ADAPTER"/src/private/*.m "$ADAPTER"/src/utility/*.m \
+    -framework Foundation -framework AppKit -framework UniformTypeIdentifiers \
+    -install_name @rpath/MediaRemoteAdapter.framework/Versions/A/MediaRemoteAdapter \
+    -o "$FW/Versions/A/MediaRemoteAdapter"
+cat > "$FW/Versions/A/Resources/Info.plist" <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleIdentifier</key>
+    <string>com.vandenbe.MediaRemoteAdapter</string>
+    <key>CFBundleName</key>
+    <string>MediaRemoteAdapter</string>
+    <key>CFBundleExecutable</key>
+    <string>MediaRemoteAdapter</string>
+    <key>CFBundlePackageType</key>
+    <string>FMWK</string>
+    <key>CFBundleShortVersionString</key>
+    <string>0.1</string>
+</dict>
+</plist>
+PLIST
+ln -sfn A "$FW/Versions/Current"
+ln -sfn Versions/Current/MediaRemoteAdapter "$FW/MediaRemoteAdapter"
+ln -sfn Versions/Current/Resources "$FW/Resources"
+cp "$ADAPTER/bin/mediaremote-adapter.pl" "$APP/Contents/Resources/mediaremote-adapter.pl"
+
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

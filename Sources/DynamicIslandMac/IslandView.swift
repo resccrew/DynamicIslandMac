@@ -53,6 +53,14 @@ struct IslandView: View {
                     .padding(.top, settings.collapsedHeight)
                     .id(title)
                     .transition(.opacity)
+            } else if let call = model.call {
+                if model.isExpanded {
+                    callExpandedContent(call)
+                        .transition(.opacity)
+                } else {
+                    callCollapsedContent(call)
+                        .transition(.opacity)
+                }
             } else if model.isTimerActive {
                 if model.isExpanded {
                     timerExpandedContent
@@ -132,6 +140,96 @@ struct IslandView: View {
             )
         }
         .padding(.horizontal, settings.collapsedPadding + settings.fillet)
+    }
+
+    // MARK: - Call
+
+    private static let callGreen = Color(red: 0.19, green: 0.82, blue: 0.35)
+
+    private func callCollapsedContent(_ call: CallInfo) -> some View {
+        HStack(spacing: 8) {
+            appIcon(call.bundleID, size: settings.collapsedArtwork)
+            Image(systemName: "phone.fill")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Self.callGreen)
+            Spacer(minLength: 0)
+            if call.cameraOn {
+                Image(systemName: "video.fill")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(Self.callGreen)
+            }
+            callDuration(call, size: 13)
+        }
+        .padding(.horizontal, settings.collapsedPadding + settings.fillet)
+    }
+
+    private func callExpandedContent(_ call: CallInfo) -> some View {
+        VStack(spacing: 12) {
+            HStack(spacing: 12) {
+                appIcon(call.bundleID, size: settings.expandedArtwork)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Звонок · \(call.appName)")
+                        .font(.system(size: settings.titleFontSize, weight: .semibold))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+                    callDuration(call, size: settings.artistFontSize)
+                }
+
+                Spacer(minLength: 0)
+            }
+
+            HStack(spacing: 10) {
+                callIndicator(symbol: "mic.fill", active: true)
+                callIndicator(symbol: call.cameraOn ? "video.fill" : "video.slash.fill", active: call.cameraOn)
+                Spacer(minLength: 0)
+                Button {
+                    model.openCallApp()
+                } label: {
+                    Text("Открыть")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 6)
+                        .background(Capsule().fill(Self.callGreen))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, settings.expandedPadding + settings.fillet)
+        .padding(.top, settings.expandedTopPadding)
+        .padding(.bottom, settings.expandedTopPadding)
+    }
+
+    /// Ticks on its own, so the rest of the island isn't re-rendered every second.
+    private func callDuration(_ call: CallInfo, size: CGFloat) -> some View {
+        TimelineView(.periodic(from: call.startedAt, by: 1)) { context in
+            Text(formatTime(context.date.timeIntervalSince(call.startedAt)))
+                .font(.system(size: size, weight: .semibold))
+                .foregroundColor(Self.callGreen)
+                .monospacedDigit()
+        }
+    }
+
+    private func callIndicator(symbol: String, active: Bool) -> some View {
+        Image(systemName: symbol)
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(active ? Self.callGreen : .white.opacity(0.4))
+            .frame(width: 28, height: 28)
+            .background(Circle().fill(Color.white.opacity(0.1)))
+    }
+
+    private func appIcon(_ bundleID: String, size: CGFloat) -> some View {
+        Group {
+            if let icon = AppIcons.icon(for: bundleID) {
+                Image(nsImage: icon).resizable().aspectRatio(contentMode: .fit)
+            } else {
+                Image(systemName: "phone.circle.fill")
+                    .resizable()
+                    .foregroundStyle(Self.callGreen)
+            }
+        }
+        .frame(width: size, height: size)
     }
 
     // MARK: - Timer
@@ -239,10 +337,17 @@ struct IslandView: View {
                     .foregroundColor(.white.opacity(0.4))
                     .monospacedDigit()
                 Spacer(minLength: 0)
-                Text("-\(formatTime(max(0, model.duration - model.position)))")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundColor(.white.opacity(0.4))
-                    .monospacedDigit()
+                if model.duration > 0 {
+                    Text("-\(formatTime(max(0, model.duration - model.position)))")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(.white.opacity(0.4))
+                        .monospacedDigit()
+                } else {
+                    // Live streams (YouTube/Twitch live) have no length.
+                    Text("LIVE")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(.red.opacity(0.85))
+                }
             }
         }
     }
@@ -310,6 +415,6 @@ struct IslandView: View {
     }
 
     private func artworkView(size: CGFloat) -> some View {
-        FlipArtwork(image: model.artwork, trackKey: model.trackKey, size: size)
+        FlipArtwork(image: model.displayArtwork, trackKey: model.trackKey, size: size)
     }
 }

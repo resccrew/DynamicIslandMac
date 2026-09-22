@@ -151,7 +151,7 @@ struct LockScreenView: View {
                     .foregroundStyle(palette.secondary)
                     .monospacedDigit()
                 Spacer(minLength: 0)
-                Text("-\(formatTime(max(0, model.duration - model.position)))")
+                Text(model.duration > 0 ? "-\(formatTime(max(0, model.duration - model.position)))" : "LIVE")
                     .font(.system(size: 12))
                     .foregroundStyle(palette.secondary)
                     .monospacedDigit()
@@ -283,7 +283,7 @@ struct LockScreenView: View {
     // MARK: - Shared pieces
 
     private func artwork(size: CGFloat) -> some View {
-        FlipArtwork(image: model.artwork, trackKey: model.trackKey, size: size, cornerRatio: 0.16)
+        FlipArtwork(image: model.displayArtwork, trackKey: model.trackKey, size: size, cornerRatio: 0.16)
             .shadow(color: .black.opacity(0.35), radius: 18, y: 8)
     }
 

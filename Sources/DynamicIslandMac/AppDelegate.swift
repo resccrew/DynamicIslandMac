@@ -5,6 +5,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// One model and one poller feed both the island and the lock screen.
     private let model = IslandViewModel()
     private let poller = NowPlayingPoller()
+    private let calls = CallMonitor()
     private let settings = IslandSettings.shared
 
     private var islandController: IslandWindowController?
@@ -26,17 +27,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         debugServer = DebugControlServer(
             model: model,
             islandController: islandController,
-            lockController: lockScreenController
+            lockController: lockScreenController,
+            poller: poller,
+            calls: calls
         )
         debugServer?.start()
         #endif
 
+        model.player = poller
         poller.start { [weak self] snapshot in
             #if DEBUG
             // An injected track must not be overwritten by the real player.
             if self?.debugServer?.isInjecting == true { return }
             #endif
             self?.model.apply(snapshot)
+        }
+
+        calls.start { [weak self] call in
+            #if DEBUG
+            if self?.debugServer?.isInjectingCall == true { return }
+            #endif
+            self?.model.setCall(call)
         }
 
         syncStatusItem()
