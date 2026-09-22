@@ -27,6 +27,50 @@ final class IslandViewModel: ObservableObject {
     /// Bundle id of whatever is playing, so the island can bring it to the front.
     @Published var playerBundleID: String?
 
+    /// Transport commands go to whichever source is playing (system-wide Now
+    /// Playing, or AppleScript as a fallback). Set by `AppDelegate`.
+    weak var player: NowPlayingPoller?
+
+    /// What the island body shows, in priority order. Glance and call are
+    /// transient takeovers; a timer outranks media the way a Live Activity does.
+    enum Content: String {
+        case glance
+        case call
+        case timer
+        case media
+        case none
+    }
+
+    var content: Content {
+        if glanceTitle != nil { return .glance }
+        if call != nil { return .call }
+        if isTimerActive { return .timer }
+        if isPlaying && !title.isEmpty || isPinnedOpen && hasContent { return .media }
+        return .none
+    }
+
+    // MARK: - Call
+
+    /// A call in progress in some calling app (see `CallMonitor`).
+    @Published private(set) var call: CallInfo?
+
+    func setCall(_ call: CallInfo?) {
+        guard call != self.call else { return }
+        let started = self.call == nil && call != nil
+        self.call = call
+        if started { Haptics.hover() }
+        sync()
+    }
+
+    /// Brings the calling app forward.
+    func openCallApp() {
+        guard
+            let bundleID = call?.bundleID,
+            let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID)
+        else { return }
+        NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
+    }
+
     /// Lock screen has three steps: the compact card, a large cover on its own,
     /// and only then the karaoke view.
     enum LockPresentation {
@@ -146,7 +190,9 @@ final class IslandViewModel: ObservableObject {
     /// it takes over the same footprint (see `isTimerActive` in content
     /// selection), so it has to be counted here too or the island never
     /// leaves `.hidden` for a timer started with nothing playing.
-    var isIslandVisible: Bool { (isPlaying && !title.isEmpty) || isTimerActive }
+    ///
+    /// A call is shown for as long as it lasts, whatever else is going on.
+    var isIslandVisible: Bool { (isPlaying && !title.isEmpty) || isTimerActive || call != nil }
 
     /// Changes exactly once per track, driving the artwork flip.
     var trackKey: String { "\(title)|\(artist)" }
@@ -324,9 +370,16 @@ final class IslandViewModel: ObservableObject {
     }
 
 
-    func togglePlayPause() { AppleScriptNowPlaying.playPause() }
-    func skipNext() { AppleScriptNowPlaying.next() }
-    func skipPrevious() { AppleScriptNowPlaying.previous() }
+    func togglePlayPause() { player?.togglePlayPause() }
+    func skipNext() { player?.next() }
+    func skipPrevious() { player?.previous() }
+
+    /// The cover, or — for a page or app that publishes none — the icon of the
+    /// app that is playing, so the island never shows an empty square for a
+    /// YouTube tab or a podcast app.
+    var displayArtwork: NSImage? {
+        artwork ?? playerBundleID.flatMap(AppIcons.icon(for:))
+    }
 
     private func sync() {
         let next: IslandState

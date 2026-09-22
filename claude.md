@@ -2,26 +2,32 @@
 
 ## Описание и цель
 Имитация iOS Dynamic Island на macOS: плавающая "остров"-панель под вырезом экрана (notch),
-показывающая Now Playing для Spotify/Apple Music, карточку на экране блокировки с синхронизированными
+показывающая Now Playing для ЛЮБОГО источника (Spotify/Music, вкладка браузера с видео/аудио —
+YouTube, SoundCloud, Twitch и т.д. в Chrome/Safari/Arc/Firefox/Яндекс, любое медиа-приложение),
+идущие звонки (Telegram, FaceTime, Zoom, Discord, Meet в браузере …), карточку на экране блокировки с синхронизированными
 лириками, уведомления о подключении устройств (зарядка, Bluetooth-аудио) и живой статус-пилюлю.
 Без сэндбокса, без Developer ID — собирается из исходников, ad-hoc подпись.
 
 ## Стек
 - Swift 5.9, Swift Package Manager (не Xcode-проект)
 - macOS 14+ (`platforms: [.macOS(.v14)]`)
-- Только системные фреймворки: AppKit, SwiftUI, Combine, CoreAudio, IOKit
+- Системные фреймворки: AppKit, SwiftUI, Combine, CoreAudio, CoreMediaIO, IOKit
+- Вендорный `Vendor/mediaremote-adapter` (BSD-3, исходники, собирается clang'ом в `build_app.sh`)
+  + системный `/usr/bin/perl` — единственный путь к системному Now Playing, см. ниже
 - Единственный внешний сетевой вызов — [LRCLIB](https://lrclib.net) API за синхронными лириками
 - Сборка: `./build_app.sh [--install]`
 
 ## Архитектура
 - `AppDelegate` — точка входа. Держит один `IslandViewModel` (источник истины), `NowPlayingPoller`
-  (опрос AppleScript раз в секунду) и, только в DEBUG, `DebugControlServer` (см. раздел про MCP).
+  (координатор Now Playing), `CallMonitor` (звонки) и, только в DEBUG, `DebugControlServer` (см. раздел про MCP).
 - `IslandViewModel` раздаёt состояние двум независимым window-контроллерам:
   `IslandWindowController` (панель под вырезом) и `LockScreenWindowController`
   (оверлей поверх экрана блокировки через приватный SkyLight — `SkyLightSpace.swift`).
 - `IslandSettings` — синглтон, персистентность через `UserDefaults`, читается напрямую всеми view.
 - `NotchShape` — чистый модуль геометрии (суперэллипсы), решён аккуратно, отдельно от остального UI.
-- `AppleScriptNowPlaying` — единственный способ читать Spotify/Music (публичного API нет).
+- `SystemNowPlaying` — системный Now Playing через mediaremote-adapter (стрим JSON, event-driven).
+  `AppleScriptNowPlaying` — fallback для Spotify/Music, если адаптер недоступен (`swift run` без бандла)
+  или умер 3 раза подряд. Команды play/pause/next/prev идут в активный источник через `model.player`.
 
 ### Ключевое договорённое решение (важно не сломать повторно)
 `hasContent` (лок-скрин, показывает паузу — как в iOS) и `isIslandVisible` (плавающий остров,
@@ -148,7 +154,9 @@ side-проекта — нет опасных force-unwrap, нет пустых 
 в памяти (кольцевой буфер 300), на диск ничего. Подключение: `AppDelegate` (+ пропуск снапшотов
 поллера, пока `isInjecting`), `IslandWindowController.debugIslandScreenRect` (DEBUG-extension).
 Эндпоинты: `GET /state`, `GET /logs`, `POST /inject/now-playing`, `/inject/clear`,
-`/simulate/hover`, `/simulate/tap`, `/simulate/glance`, `/simulate/timer`, `/simulate/lock-preview`.
+`/simulate/hover`, `/simulate/tap`, `/simulate/glance`, `/simulate/timer`, `/simulate/lock-preview`,
+`/simulate/command` (play_pause/next/previous через путь кнопок), `/inject/call`, `/inject/call/clear`,
+`/simulate/call-apps`. В `/state` также `content`, `call`, `playerBundleID`, `nowPlayingSource`, `showsAppIcon`.
 Координаты в `/state` — top-left, points, главный дисплей.
 
 **MCP-сторона** — `mcp/` (Python 3.13, uv, `mcp` SDK, паттерны из `~/telegram-mcp`: Result-типы,
@@ -208,6 +216,43 @@ side-проекта — нет опасных force-unwrap, нет пустых 
 
 Оставлено (не баги, дизайн): раскрытый таймер использует высоту музыкальной карточки — снизу ~45pt
 пустоты; на лок-скрине без обложки — размытая светлая заглушка.
+
+## Системный Now Playing и звонки (2026-09-23)
+**Now Playing — любой источник.** С macOS 15.4 `MediaRemote.framework` отдаёт пустоту не-Apple
+процессам (проверено на macOS 27: `MRMediaRemoteGetNowPlayingInfo` → nil). Обход — mediaremote-adapter:
+`/usr/bin/perl` (Apple-signed, entitled) грузит наш маленький фреймворк и стримит состояние.
+- Бандл: `Contents/Frameworks/MediaRemoteAdapter.framework` + `Contents/Resources/mediaremote-adapter.pl`
+  (`build_app.sh`, universal arm64+x86_64, подписывается вместе с app через `codesign --deep`).
+- `SystemNowPlaying`: `perl … stream --no-diff --debounce=100 --allow-missing-title`, каждая строка —
+  полное состояние; пустой payload = ничего не играет. Перезапуск через 2с; 3 смерти без вывода →
+  `onFailure` → AppleScript. `send N` — MRCommand (0 play, 1 pause, 2 toggle, 4 next, 5 prev).
+- `NowPlayingPoller` раз в секунду переизлучает последнее состояние с позицией
+  `elapsed + (now - timestamp)`, иначе при сворачивании позиция застывала бы.
+- Хелперы → приложение (`AppIdentity.owner`): Safari играет через `com.apple.WebKit.GPU`,
+  Chromium/Electron — через `<app>.helper…`. Без этого у Safari не было иконки и «Открыть».
+- Страница без метаданных: title = заголовок вкладки (его даёт браузер), subtitle = имя браузера.
+  Нет обложки → иконка приложения-источника (`model.displayArtwork`, `AppIcons` кэширует NSImage —
+  `FlipArtwork` сравнивает по identity, новый объект на каждый рендер = вечный переворот).
+- Live-стримы: адаптер выкидывает `duration=inf` → `duration 0` → в карточке и на локскрине «LIVE».
+- Проверено вживую: YouTube (live, Chrome), локальная `<audio>` без метаданных (Safari),
+  страница с Media Session API (Chrome), Spotify; play/pause из острова доходит до вкладки.
+
+**Звонки** — `CallMonitor`, без API мессенджеров: CoreAudio per-process `kAudioProcessPropertyIsRunningInput`
+(macOS 14.2+) + CoreMediaIO `kCMIODevicePropertyDeviceIsRunningSomewhere` для камеры. Опрос 1с на фоне.
+- Звонок = известное call-приложение (список префиксов bundle id: Telegram, FaceTime/`avconferenced`,
+  Zoom, Discord, WhatsApp, Slack, Teams, Skype, Viber, Signal, Webex, браузеры для Meet/веб-звонков)
+  держит микрофон ≥2с; конец — через 2с после отпускания. Siri/диктовка (`com.apple.CoreSpeech`)
+  держит микрофон постоянно — поэтому только белый список, не «любой, кто пишет с микрофона».
+- Приоритет контента: glance > call > timer > media (`IslandViewModel.content`). Звонок делает остров
+  видимым (`isIslandVisible`), но НЕ трогает `hasContent`/локскрин.
+- UI: collapsed — иконка приложения, зелёная трубка, камера (если включена), таймер; expanded —
+  «Звонок · App», индикаторы микрофона/камеры, кнопка «Открыть».
+- Реальное обнаружение проверено через DEBUG `/simulate/call-apps` (CoreSpeech как «call-app»):
+  звонок появился через 2с, ушёл через ~2с. Настоящий звонок в Telegram не делался (нельзя звонить
+  людям в тестах) — UI проверен инъекцией.
+
+Ограничения: браузер с микрофоном = «звонок» (Meet и т.п.), даже если это диктовка на сайте; mute
+внутри приложения не виден (микрофон остаётся открытым); камера — глобально, не по приложению.
 
 ## Зоны ответственности агентов в этом проекте
 - **Planner** — приоритизация находок аудита, разбивка на фичи/фиксы.

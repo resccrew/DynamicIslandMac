@@ -171,3 +171,70 @@ def test_rebuild_missing_script_returns_error(monkeypatch):
 
     monkeypatch.setattr(server.subprocess, "run", missing)
     assert server.rebuild_and_relaunch("debug").startswith("error: cannot run build_app.sh")
+
+
+# --- system now playing + calls ---
+
+def test_inject_passes_source_bundle_id(app):
+    server.inject_now_playing("Video", bundle_id="com.google.Chrome")
+    assert app.requests[-1][2]["bundle_id"] == "com.google.Chrome"
+
+
+def test_inject_without_bundle_id_omits_it(app):
+    server.inject_now_playing("Song")
+    assert "bundle_id" not in app.requests[-1][2]
+
+
+@pytest.mark.parametrize(
+    "call, path, body",
+    [
+        (lambda: server.send_command("play_pause"), "/simulate/command", {"command": "play_pause"}),
+        (lambda: server.inject_call("ru.keepcoder.Telegram", camera=True),
+         "/inject/call", {"bundle_id": "ru.keepcoder.Telegram", "camera": True, "elapsed": 0}),
+        (lambda: server.clear_call(), "/inject/call/clear", {}),
+        (lambda: server.set_call_apps(["com.apple.CoreSpeech"]),
+         "/simulate/call-apps", {"bundle_ids": ["com.apple.CoreSpeech"]}),
+    ],
+)
+def test_call_and_command_tools_hit_endpoints(app, call, path, body):
+    assert "error" not in call()
+    assert app.requests[-1][1:] == (path, body)
+
+
+def test_send_command_rejects_unknown(app):
+    assert server.send_command("stop").startswith("error")
+    assert app.requests == []
+
+
+def call_state(**extra):
+    s = playing_state()
+    s.update(content="call", call={"app": "Telegram", "bundleID": "ru.keepcoder.Telegram", "cameraOn": False, "elapsed": 3})
+    s.update(extra)
+    return s
+
+
+def test_call_counts_as_visible_even_when_paused():
+    s = call_state(isPlaying=False)
+    assert invariants.check(s) == []
+    s["isIslandVisible"] = False
+    s["state"] = "hidden"
+    assert any("isIslandVisible" in v for v in invariants.check(s))
+
+
+def test_content_priority():
+    assert invariants.check(call_state()) == []
+    assert any("priority" in v for v in invariants.check(call_state(content="media")))
+    glance = call_state(glanceTitle="Встреча", state="glance", content="glance")
+    assert invariants.check(glance) == []
+    timer_and_call = call_state(timerRemaining=30)
+    assert invariants.check(timer_and_call) == []
+    assert any("priority" in v for v in invariants.check(call_state(timerRemaining=30, content="timer")))
+
+
+def test_content_media_and_none():
+    s = playing_state()
+    s["content"] = "media"
+    assert invariants.check(s) == []
+    s.update(isPlaying=False, isIslandVisible=False, state="hidden", content="none")
+    s["islandShapeRect"] = dict(BASE_STATE["islandShapeRect"])
+    assert invariants.check(s) == []

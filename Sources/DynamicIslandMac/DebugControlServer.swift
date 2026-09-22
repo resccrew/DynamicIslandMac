@@ -15,12 +15,16 @@ final class DebugControlServer {
     private let model: IslandViewModel
     private weak var islandController: IslandWindowController?
     private weak var lockController: LockScreenWindowController?
+    private weak var poller: NowPlayingPoller?
+    private weak var calls: CallMonitor?
     private var listener: NWListener?
     private var cancellables = Set<AnyCancellable>()
 
     /// While true the real poller's snapshots are dropped, so an injected
     /// track isn't overwritten a second later.
     private(set) var isInjecting = false
+    /// Same for the call monitor while a call is injected.
+    private(set) var isInjectingCall = false
 
     private var hoverSimulated = false
     private var realPointerCheck: (() -> Bool)?
@@ -32,11 +36,15 @@ final class DebugControlServer {
     init(
         model: IslandViewModel,
         islandController: IslandWindowController?,
-        lockController: LockScreenWindowController?
+        lockController: LockScreenWindowController?,
+        poller: NowPlayingPoller?,
+        calls: CallMonitor?
     ) {
         self.model = model
         self.islandController = islandController
         self.lockController = lockController
+        self.poller = poller
+        self.calls = calls
     }
 
     func start() {
@@ -80,6 +88,15 @@ final class DebugControlServer {
         model.$title
             .removeDuplicates()
             .sink { [weak self] in self?.record("title -> \"\($0)\"") }
+            .store(in: &cancellables)
+        model.$call
+            .map { $0.map { "\($0.appName) camera=\($0.cameraOn)" } ?? "none" }
+            .removeDuplicates()
+            .sink { [weak self] in self?.record("call -> \($0)") }
+            .store(in: &cancellables)
+        model.$playerBundleID
+            .removeDuplicates()
+            .sink { [weak self] in self?.record("player -> \($0 ?? "none")") }
             .store(in: &cancellables)
         model.$lyrics
             .map(\.count)
@@ -139,6 +156,30 @@ final class DebugControlServer {
             releasePointer()
             record("injection cleared, real poller resumed")
             return (200, ["ok": true])
+        case ("POST", "/inject/call"):
+            return injectCall(body)
+        case ("POST", "/inject/call/clear"):
+            isInjectingCall = false
+            model.setCall(nil)
+            record("call injection cleared, real call monitor resumed")
+            return (200, ["ok": true])
+        case ("POST", "/simulate/call-apps"):
+            // Treats extra bundle ids as call apps, to exercise the real
+            // CoreAudio detection with whatever holds the mic (e.g. Siri).
+            let ids = Set(body["bundle_ids"] as? [String] ?? [])
+            calls?.setExtraCallApps(ids)
+            record("extra call apps \(ids.sorted())")
+            return (200, ["ok": true])
+        case ("POST", "/simulate/command"):
+            // Same path as the island's buttons: routed to the active source.
+            switch body["command"] as? String {
+            case "play_pause": model.togglePlayPause()
+            case "next": model.skipNext()
+            case "previous": model.skipPrevious()
+            default: return (400, ["error": "command must be play_pause, next or previous"])
+            }
+            record("simulated command \(body["command"] ?? "")")
+            return (200, ["ok": true])
         case ("POST", "/simulate/hover"):
             return simulateHover(inside: body["inside"] as? Bool ?? true)
         case ("POST", "/simulate/tap"):
@@ -194,6 +235,22 @@ final class DebugControlServer {
         )
         model.apply(snapshot)
         record("injected now-playing (playing=\(snapshot.isPlaying))")
+        return (200, ["ok": true, "state": "\(model.state)"])
+    }
+
+    private func injectCall(_ body: [String: Any]) -> (Int, [String: Any]) {
+        guard let bundleID = body["bundle_id"] as? String else {
+            return (400, ["error": "bundle_id is required"])
+        }
+        isInjectingCall = true
+        let elapsed = body["elapsed"] as? Double ?? 0
+        model.setCall(CallInfo(
+            appName: body["app"] as? String ?? CallMonitor.appName(bundleID),
+            bundleID: bundleID,
+            startedAt: Date().addingTimeInterval(-elapsed),
+            cameraOn: body["camera"] as? Bool ?? false
+        ))
+        record("injected call \(bundleID)")
         return (200, ["ok": true, "state": "\(model.state)"])
     }
 
@@ -259,6 +316,19 @@ final class DebugControlServer {
             "timerRemaining": model.timerRemaining as Any? ?? NSNull(),
             "glanceTitle": model.glanceTitle as Any? ?? NSNull(),
             "injecting": isInjecting,
+            "injectingCall": isInjectingCall,
+            "content": model.content.rawValue,
+            "playerBundleID": model.playerBundleID as Any? ?? NSNull(),
+            "nowPlayingSource": poller?.source.rawValue ?? "none",
+            "showsAppIcon": model.artwork == nil && model.displayArtwork != nil,
+            "call": model.call.map { call -> [String: Any] in
+                [
+                    "app": call.appName,
+                    "bundleID": call.bundleID,
+                    "cameraOn": call.cameraOn,
+                    "elapsed": Date().timeIntervalSince(call.startedAt),
+                ]
+            } as Any? ?? NSNull(),
             "hoverSimulated": hoverSimulated,
             "screen": [
                 "frame": topLeft(screenFrame, in: screenFrame),

@@ -23,6 +23,12 @@ call rebuild_and_relaunch first if get_state says the debug server is unreachabl
 - get_state: live view-model + window geometry (top-left points, main display).
 - inject_now_playing / clear_injection: fake a track without Spotify; the real poller is paused while injected.
 - hover, tap, show_glance, start_timer, toggle_lock_preview: drive the UI states.
+- Now Playing is system-wide (any app or browser tab; state.nowPlayingSource="system").
+  inject_now_playing(bundle_id=...) fakes the source app (its icon shows when there is no artwork);
+  send_command drives play/pause/next through the same path as the island's buttons.
+- inject_call / clear_call fake a call (priority: glance > call > timer > media, see state.content);
+  set_call_apps makes extra bundle ids count as call apps to exercise REAL mic detection
+  (e.g. "com.apple.CoreSpeech" while Siri listens; a call starts after 2s of mic use).
 - screenshot_island: crop around the island; frames>1 for animations (fade, spring).
 - check_invariants: after every action, list violated rules (visibility, state machine, geometry).
 - get_logs: in-memory event history (state changes, injections).
@@ -65,6 +71,7 @@ def inject_now_playing(
     position: float = 0,
     duration: float = 200,
     artwork_path: str | None = None,
+    bundle_id: str | None = None,
 ) -> str:
     """Feed a fake track into the app (pauses the real Spotify/Music poller until clear_injection).
     Call again with playing=false to simulate pause."""
@@ -77,7 +84,39 @@ def inject_now_playing(
     }
     if artwork_path:
         body["artwork_path"] = str(Path(artwork_path).expanduser())
+    if bundle_id:
+        body["bundle_id"] = bundle_id
     return _post("/inject/now-playing", body)
+
+
+@mcp.tool()
+def send_command(command: str) -> str:
+    """Transport command via the island's own path to the active source: play_pause, next or previous.
+    Works on the real player (Spotify, a YouTube tab …) when nothing is injected."""
+    if command not in ("play_pause", "next", "previous"):
+        return "error: command must be play_pause, next or previous"
+    return _post("/simulate/command", {"command": command})
+
+
+@mcp.tool()
+def inject_call(bundle_id: str, app: str | None = None, camera: bool = False, elapsed: float = 0) -> str:
+    """Fake a call in an app (e.g. ru.keepcoder.Telegram); pauses real call detection until clear_call."""
+    body: dict[str, Any] = {"bundle_id": bundle_id, "camera": camera, "elapsed": elapsed}
+    if app:
+        body["app"] = app
+    return _post("/inject/call", body)
+
+
+@mcp.tool()
+def clear_call() -> str:
+    """End the injected call; real mic/camera detection takes over again."""
+    return _post("/inject/call/clear")
+
+
+@mcp.tool()
+def set_call_apps(bundle_ids: list[str]) -> str:
+    """Treat these extra bundle ids as call apps (live test of the real CoreAudio detection). [] resets."""
+    return _post("/simulate/call-apps", {"bundle_ids": bundle_ids})
 
 
 @mcp.tool()
