@@ -23,6 +23,8 @@ call rebuild_and_relaunch first if get_state says the debug server is unreachabl
 - get_state: live view-model + window geometry (top-left points, main display).
 - inject_now_playing / clear_injection: fake a track without Spotify; the real poller is paused while injected.
 - hover, tap, show_glance, start_timer, toggle_lock_preview: drive the UI states.
+- The timer is the SYSTEM Clock timer (Часы/Siri/Shortcuts), read from mobiletimerd's log;
+  start_timer injects one (seconds/paused/title/fire), cancel=true returns to real timers.
 - Now Playing is system-wide (any app or browser tab; state.nowPlayingSource="system").
   inject_now_playing(bundle_id=...) fakes the source app (its icon shows when there is no artwork);
   send_command drives play/pause/next through the same path as the island's buttons.
@@ -145,9 +147,28 @@ def show_glance(title: str, subtitle: str | None = None) -> str:
 
 
 @mcp.tool()
-def start_timer(minutes: float = 1, cancel: bool = False) -> str:
-    """Start a countdown in the island, or cancel=true to stop it."""
-    return _post("/simulate/timer", {"minutes": minutes, "cancel": cancel})
+def start_timer(
+    minutes: float = 1,
+    cancel: bool = False,
+    seconds: float | None = None,
+    paused: bool = False,
+    title: str = "",
+    fire: bool = False,
+) -> str:
+    """Inject a system-Clock-like timer (the island follows the macOS Clock app's timers).
+    seconds overrides minutes; paused=true freezes it; fire=true simulates it going off
+    (the "Таймер завершён" glance); cancel=true ends the injection and brings back the
+    real Clock timers."""
+    body: dict = {"minutes": minutes, "cancel": cancel}
+    if seconds is not None:
+        body["seconds"] = seconds
+    if paused:
+        body["paused"] = True
+    if title:
+        body["title"] = title
+    if fire:
+        body["fire"] = True
+    return _post("/simulate/timer", body)
 
 
 @mcp.tool()

@@ -74,6 +74,10 @@ struct IslandView: View {
             }
         }
         .clipShape(shape)
+        .coordinateSpace(name: ContentFrameKey.space)
+        .onPreferenceChange(ContentFrameKey.self) { frames in
+            model.collapsedContentFrames = frames
+        }
         // One observer for all cards: a card inserted fresh doesn't report its
         // initial height to an observer of its own, so it would inherit the
         // previous card's size.
@@ -132,9 +136,9 @@ struct IslandView: View {
     // MARK: - Collapsed
 
     private var collapsedContent: some View {
-        HStack(spacing: 0) {
+        earsRow {
             artworkView(size: settings.collapsedArtwork)
-            Spacer(minLength: 0)
+        } trailing: {
             EqualizerView(
                 isPlaying: model.isPlaying,
                 color: model.accent,
@@ -142,7 +146,35 @@ struct IslandView: View {
                 maxHeight: 12
             )
         }
-        .padding(.horizontal, settings.collapsedPadding + settings.fillet)
+    }
+
+    /// Collapsed content lives only in the two ears beside the camera: the
+    /// notch-wide middle stays empty, since whatever is drawn there is hidden
+    /// by the hardware (and screenshots don't show it, so it goes unnoticed).
+    private func earsRow<Leading: View, Trailing: View>(
+        @ViewBuilder leading: () -> Leading,
+        @ViewBuilder trailing: () -> Trailing
+    ) -> some View {
+        let notch = ScreenNotch.size()
+        let body = islandSize.width - settings.fillet * 2
+        let ear = max(0, (body - notch.width) / 2)
+        return HStack(spacing: 0) {
+            // Measured before padding and framing: the drawn content itself,
+            // which can overflow its ear if it doesn't fit.
+            leading()
+                .fixedSize()
+                .reportsContentFrame("leading")
+                .padding(.leading, settings.collapsedPadding)
+                .frame(width: ear, alignment: .leading)
+            Color.clear.frame(width: notch.width)
+            trailing()
+                .fixedSize()
+                .reportsContentFrame("trailing")
+                .padding(.trailing, settings.collapsedPadding)
+                .frame(width: ear, alignment: .trailing)
+        }
+        .frame(height: min(islandSize.height, notch.height))
+        .frame(maxHeight: .infinity, alignment: .top)
     }
 
     // MARK: - Call
@@ -150,20 +182,23 @@ struct IslandView: View {
     private static let callGreen = Color(red: 0.19, green: 0.82, blue: 0.35)
 
     private func callCollapsedContent(_ call: CallInfo) -> some View {
-        HStack(spacing: 8) {
-            appIcon(call.bundleID, size: settings.collapsedArtwork)
-            Image(systemName: "phone.fill")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(Self.callGreen)
-            Spacer(minLength: 0)
-            if call.cameraOn {
-                Image(systemName: "video.fill")
-                    .font(.system(size: 10, weight: .semibold))
+        earsRow {
+            HStack(spacing: 6) {
+                appIcon(call.bundleID, size: settings.collapsedArtwork - 4)
+                Image(systemName: "phone.fill")
+                    .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(Self.callGreen)
             }
-            callDuration(call, size: 13)
+        } trailing: {
+            HStack(spacing: 5) {
+                if call.cameraOn {
+                    Image(systemName: "video.fill")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(Self.callGreen)
+                }
+                callDuration(call, size: 13)
+            }
         }
-        .padding(.horizontal, settings.collapsedPadding + settings.fillet)
     }
 
     private func callExpandedContent(_ call: CallInfo) -> some View {
@@ -236,40 +271,50 @@ struct IslandView: View {
     // MARK: - Timer
 
     private var timerCollapsedContent: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "timer")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(.white.opacity(0.75))
-            Spacer(minLength: 0)
-            Text(formatTime(model.timerRemaining ?? 0))
+        earsRow {
+            Image(systemName: model.isTimerPaused ? "pause.fill" : "timer")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(Self.timerOrange)
+        } trailing: {
+            Text(formatCountdown(model.timerRemaining ?? 0))
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundColor(.white)
+                .foregroundColor(model.isTimerPaused ? .white.opacity(0.5) : Self.timerOrange)
                 .monospacedDigit()
+                .lineLimit(1)
         }
-        .padding(.horizontal, settings.collapsedPadding + settings.fillet)
     }
 
     private var timerExpandedContent: some View {
-        VStack(spacing: 14) {
-            Text(formatTime(model.timerRemaining ?? 0))
-                .font(.system(size: 34, weight: .semibold))
-                .foregroundColor(.white)
-                .monospacedDigit()
+        VStack(spacing: 12) {
+            VStack(spacing: 2) {
+                Text(model.timerTitle.isEmpty
+                     ? (model.isTimerPaused ? "Таймер на паузе" : "Таймер")
+                     : model.timerTitle)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.55))
+                    .lineLimit(1)
+                Text(formatCountdown(model.timerRemaining ?? 0))
+                    .font(.system(size: 34, weight: .semibold))
+                    .foregroundColor(model.isTimerPaused ? .white.opacity(0.5) : Self.timerOrange)
+                    .monospacedDigit()
+            }
 
             GeometryReader { proxy in
                 ZStack(alignment: .leading) {
                     Capsule().fill(Color.white.opacity(0.22))
                     Capsule()
-                        .fill(Color.white.opacity(0.85))
+                        .fill(Self.timerOrange.opacity(model.isTimerPaused ? 0.45 : 0.9))
                         .frame(width: proxy.size.width * timerFraction)
                 }
             }
             .frame(height: 4)
 
+            // Pause and cancel stay in the Clock app: its daemon won't take
+            // commands from a third-party process.
             Button {
-                model.cancelTimer()
+                model.openClock()
             } label: {
-                Text("Отменить")
+                Text("Открыть Часы")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.75))
                     .padding(.horizontal, 14)
@@ -280,6 +325,9 @@ struct IslandView: View {
         }
         .expandedCard(settings: settings)
     }
+
+    /// The system timer's own color (Clock, Control Center).
+    static let timerOrange = Color(red: 1.0, green: 0.62, blue: 0.04)
 
     private var timerFraction: CGFloat {
         guard model.timerTotal > 0, let remaining = model.timerRemaining else { return 0 }
@@ -351,6 +399,13 @@ struct IslandView: View {
     private var progressFraction: CGFloat {
         guard model.duration > 0 else { return 0 }
         return CGFloat(min(1, max(0, model.position / model.duration)))
+    }
+
+    /// Timers run past an hour, unlike most tracks: 1:05:09 rather than 65:09.
+    private func formatCountdown(_ seconds: Double) -> String {
+        guard seconds.isFinite, seconds >= 3600 else { return formatTime(seconds) }
+        let total = Int(seconds)
+        return String(format: "%d:%02d:%02d", total / 3600, total / 60 % 60, total % 60)
     }
 
     private func formatTime(_ seconds: Double) -> String {
@@ -435,5 +490,26 @@ private extension View {
                 Color.clear.preference(key: ExpandedHeightKey.self, value: proxy.size.height)
             })
             .frame(maxHeight: .infinity, alignment: .top)
+    }
+}
+
+/// Where the collapsed content actually landed, in the island's own
+/// coordinates — read by the debug server to check nothing sits under the notch.
+struct ContentFrameKey: PreferenceKey {
+    static let space = "island"
+    static var defaultValue: [String: CGRect] = [:]
+    static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) {
+        value.merge(nextValue()) { $1 }
+    }
+}
+
+private extension View {
+    func reportsContentFrame(_ name: String) -> some View {
+        overlay(GeometryReader { proxy in
+            Color.clear.preference(
+                key: ContentFrameKey.self,
+                value: [name: proxy.frame(in: .named(ContentFrameKey.space))]
+            )
+        })
     }
 }

@@ -6,6 +6,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let model = IslandViewModel()
     private let poller = NowPlayingPoller()
     private let calls = CallMonitor()
+    private let systemTimers = SystemTimerMonitor()
     private let settings = IslandSettings.shared
 
     private var islandController: IslandWindowController?
@@ -31,6 +32,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             poller: poller,
             calls: calls
         )
+        debugServer?.systemTimers = systemTimers
         debugServer?.start()
         #endif
 
@@ -49,6 +51,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             #endif
             self?.model.setCall(call)
         }
+
+        systemTimers.start(
+            onChange: { [weak self] timers in
+                #if DEBUG
+                if self?.debugServer?.isInjectingTimer == true { return }
+                #endif
+                self?.model.applySystemTimers(timers)
+            },
+            onFire: { [weak self] title in
+                #if DEBUG
+                if self?.debugServer?.isInjectingTimer == true { return }
+                #endif
+                self?.model.systemTimerFired(title: title)
+            }
+        )
 
         syncStatusItem()
         settings.objectWillChange
@@ -105,10 +122,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         menu.addItem(.separator())
 
-        let timerItem = NSMenuItem(title: "Таймер", action: nil, keyEquivalent: "")
-        timerItem.submenu = makeTimerMenu()
-        menu.addItem(timerItem)
-
         let calendarItem = NSMenuItem(
             title: "Ближайшее событие",
             action: #selector(showCalendarGlance),
@@ -125,67 +138,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         item.menu = menu
         return item
-    }
-
-    private func makeTimerMenu() -> NSMenu {
-        let menu = NSMenu()
-        for minutes in [1.0, 5.0, 10.0, 15.0, 30.0] {
-            let item = NSMenuItem(
-                title: "\(Int(minutes)) мин",
-                action: #selector(startTimerFromMenu(_:)),
-                keyEquivalent: ""
-            )
-            item.target = self
-            item.representedObject = minutes
-            menu.addItem(item)
-        }
-
-        menu.addItem(.separator())
-
-        let customItem = NSMenuItem(
-            title: "Другое…",
-            action: #selector(startCustomTimer),
-            keyEquivalent: ""
-        )
-        customItem.target = self
-        menu.addItem(customItem)
-
-        let cancelItem = NSMenuItem(
-            title: "Остановить таймер",
-            action: #selector(cancelTimer),
-            keyEquivalent: ""
-        )
-        cancelItem.target = self
-        menu.addItem(cancelItem)
-
-        return menu
-    }
-
-    @objc private func startTimerFromMenu(_ sender: NSMenuItem) {
-        guard let minutes = sender.representedObject as? Double else { return }
-        model.startTimer(minutes: minutes)
-    }
-
-    @objc private func startCustomTimer() {
-        let alert = NSAlert()
-        alert.messageText = "Таймер"
-        alert.informativeText = "Сколько минут?"
-        alert.addButton(withTitle: "Начать")
-        alert.addButton(withTitle: "Отмена")
-
-        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 120, height: 24))
-        field.stringValue = "10"
-        alert.accessoryView = field
-        alert.window.initialFirstResponder = field
-
-        guard alert.runModal() == .alertFirstButtonReturn,
-              let minutes = Double(field.stringValue), minutes > 0
-        else { return }
-        model.startTimer(minutes: minutes)
-    }
-
-    @objc private func cancelTimer() {
-        model.cancelTimer()
     }
 
     @objc private func showCalendarGlance() {
