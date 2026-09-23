@@ -43,6 +43,7 @@ final class IslandViewModel: ObservableObject {
     enum Content: String {
         case glance
         case call
+        case agenda
         case timer
         case media
         case none
@@ -51,6 +52,7 @@ final class IslandViewModel: ObservableObject {
     var content: Content {
         if glanceTitle != nil { return .glance }
         if call != nil { return .call }
+        if isAgendaNow || isAgendaPinned { return .agenda }
         if isTimerActive { return .timer }
         if isPlaying && !title.isEmpty || isPinnedOpen && hasContent { return .media }
         return .none
@@ -151,6 +153,92 @@ final class IslandViewModel: ObservableObject {
         if remaining != timerRemaining { timerRemaining = remaining }
     }
 
+    // MARK: - Agenda
+
+    /// Today's events and reminders from the system Calendar and Reminders
+    /// (see `AgendaMonitor`).
+    @Published private(set) var agenda = AgendaSnapshot()
+    /// The agenda card opened from the menu bar, with nothing happening "now".
+    @Published private(set) var isAgendaPinned = false
+    private var agendaPinTimer: Timer?
+
+    /// Supplied by `AppDelegate`: ticks a reminder off in the Reminders app.
+    var completeReminderHandler: ((String) -> Void)?
+
+    /// An event that just started or a reminder that just fell due.
+    var isAgendaNow: Bool { agenda.nowEvent != nil || agenda.nowReminder != nil }
+
+    func applyAgenda(_ snapshot: AgendaSnapshot) {
+        guard snapshot != agenda else { return }
+        agenda = snapshot
+        sync()
+    }
+
+    func handleAgendaAlert(_ alert: AgendaAlert) {
+        switch alert {
+        case let .upcoming(event, minutes):
+            presentGlance(
+                title: event.title,
+                subtitle: "Через \(minutes) мин · \(Self.clock(event.start))",
+                symbol: "calendar",
+                action: joinAction(for: event)
+            )
+        case let .started(event):
+            presentGlance(
+                title: "Сейчас: \(event.title)",
+                subtitle: "\(Self.clock(event.start))–\(Self.clock(event.end))",
+                symbol: "calendar.badge.clock",
+                action: joinAction(for: event)
+            )
+        case let .due(reminder):
+            presentGlance(
+                title: reminder.title,
+                subtitle: "Напоминание",
+                symbol: "checklist",
+                action: GlanceAction(label: "Выполнено") { [weak self] in
+                    self?.completeReminder(id: reminder.id)
+                }
+            )
+        }
+    }
+
+    func completeReminder(id: String) {
+        completeReminderHandler?(id)
+    }
+
+    func join(_ event: AgendaEvent) {
+        guard let url = event.joinURL else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    private func joinAction(for event: AgendaEvent) -> GlanceAction? {
+        guard event.joinURL != nil else { return nil }
+        return GlanceAction(label: "Подключиться") { [weak self] in self?.join(event) }
+    }
+
+    /// Menu bar «Сегодня»: the agenda card for a few seconds, or for as long
+    /// as the pointer stays on it.
+    func showAgenda() {
+        isAgendaPinned = true
+        sync()
+        agendaPinTimer?.invalidate()
+        agendaPinTimer = Timer.scheduledTimer(withTimeInterval: 6, repeats: false) { [weak self] _ in
+            guard let self, self.pointerIsInsideIsland?() != true else { return }
+            self.isAgendaPinned = false
+            self.sync()
+        }
+    }
+
+    static func clock(_ date: Date) -> String {
+        clockFormatter.string(from: date)
+    }
+
+    private static let clockFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter
+    }()
+
     // MARK: - Calendar glance
 
     /// A brief, dismiss-itself-on-a-timer peek — the same mechanic the old
@@ -160,21 +248,44 @@ final class IslandViewModel: ObservableObject {
     @Published private(set) var glanceSubtitle: String?
     /// SF Symbol for the glance, so a finished timer does not wear a calendar.
     @Published private(set) var glanceSymbol = "calendar"
+    /// Optional button on the glance («Подключиться», «Выполнено»).
+    @Published private(set) var glanceAction: GlanceAction?
     private var glanceTimer: Timer?
 
-    func presentGlance(title: String, subtitle: String?, symbol: String = "calendar") {
+    func presentGlance(
+        title: String,
+        subtitle: String?,
+        symbol: String = "calendar",
+        action: GlanceAction? = nil
+    ) {
         glanceTimer?.invalidate()
         glanceTitle = title
         glanceSubtitle = subtitle
         glanceSymbol = symbol
+        glanceAction = action
         Haptics.hover()
         sync()
 
-        glanceTimer = Timer.scheduledTimer(withTimeInterval: 4, repeats: false) { [weak self] _ in
-            self?.glanceTitle = nil
-            self?.glanceSubtitle = nil
-            self?.sync()
+        // A glance with a button stays long enough to reach for it.
+        let duration: TimeInterval = action == nil ? 4 : 8
+        glanceTimer = Timer.scheduledTimer(withTimeInterval: duration, repeats: false) { [weak self] _ in
+            self?.dismissGlance()
         }
+    }
+
+    func performGlanceAction() {
+        let action = glanceAction
+        dismissGlance()
+        action?.perform()
+    }
+
+    private func dismissGlance() {
+        glanceTimer?.invalidate()
+        glanceTimer = nil
+        glanceTitle = nil
+        glanceSubtitle = nil
+        glanceAction = nil
+        sync()
     }
 
     /// Index of the line that should be highlighted, or nil before the first one.
@@ -219,7 +330,12 @@ final class IslandViewModel: ObservableObject {
     /// leaves `.hidden` for a timer started with nothing playing.
     ///
     /// A call is shown for as long as it lasts, whatever else is going on.
-    var isIslandVisible: Bool { (isPlaying && !title.isEmpty) || isTimerActive || call != nil }
+    ///
+    /// So is an event that just started or a reminder that just fell due, and
+    /// the agenda card opened from the menu bar.
+    var isIslandVisible: Bool {
+        (isPlaying && !title.isEmpty) || isTimerActive || call != nil || isAgendaNow || isAgendaPinned
+    }
 
     /// Changes exactly once per track, driving the artwork flip.
     var trackKey: String { "\(title)|\(artist)" }
@@ -249,6 +365,13 @@ final class IslandViewModel: ObservableObject {
     func tap() {
         // An open card stays tappable after a pause, so it can still be closed.
         guard isIslandVisible || isPinnedOpen else { return }
+        // The menu-opened agenda card closes on a click like any open card.
+        if isAgendaPinned {
+            isAgendaPinned = false
+            isPinnedOpen = false
+            sync()
+            return
+        }
         isPinnedOpen.toggle()
         sync()
     }
@@ -264,11 +387,12 @@ final class IslandViewModel: ObservableObject {
     }
 
     private func closeFromPointerExit() {
-        guard isHovering || isPinnedOpen else { return }
+        guard isHovering || isPinnedOpen || isAgendaPinned else { return }
         isHovering = false
         // Leaving also closes a click-opened island, so it never gets stranded
         // open once the pointer is elsewhere.
         isPinnedOpen = false
+        isAgendaPinned = false
         sync()
     }
 
@@ -414,6 +538,8 @@ final class IslandViewModel: ObservableObject {
             // A calendar glance takes precedence over playback, so the
             // island can show it even with nothing playing.
             next = .glance
+        } else if isAgendaPinned {
+            next = .expanded
         } else if isPinnedOpen && (isIslandVisible || hasContent) {
             // Pausing from the card's own button must not pull the card, and
             // the play button with it, out from under the pointer. It closes
@@ -455,7 +581,7 @@ extension IslandViewModel {
             // A countdown or call duration is wider than the ear beside the
             // camera at the media width; widen both ears evenly rather than
             // let it slide under the notch.
-            guard content == .timer || content == .call else { return size }
+            guard content == .timer || content == .call || content == .agenda else { return size }
             let wide = settings.wideEarsWidth(notch: notch, peek: state == .peek)
             return CGSize(width: max(size.width, wide), height: size.height)
         default:
@@ -463,4 +589,12 @@ extension IslandViewModel {
         }
     }
 
+}
+
+/// A button on a glance, and what it does.
+struct GlanceAction: Equatable {
+    let label: String
+    let perform: () -> Void
+
+    static func == (lhs: GlanceAction, rhs: GlanceAction) -> Bool { lhs.label == rhs.label }
 }

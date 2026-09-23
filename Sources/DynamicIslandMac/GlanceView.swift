@@ -8,6 +8,9 @@ struct GlanceView: View {
     let subtitle: String?
     var symbol = "calendar"
     let accent: Color
+    /// «Подключиться» for a call link, «Выполнено» for a reminder.
+    var actionLabel: String? = nil
+    var onAction: () -> Void = {}
 
     @State private var iconIn = false
     @State private var textIn = false
@@ -38,6 +41,21 @@ struct GlanceView: View {
             .offset(x: textIn ? 0 : -10)
 
             Spacer(minLength: 0)
+
+            if let actionLabel {
+                Button(action: onAction) {
+                    Text(actionLabel)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .fixedSize()
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(Capsule().fill(accent.opacity(0.9)))
+                }
+                .buttonStyle(.plain)
+                .opacity(textIn ? 1 : 0)
+            }
         }
         .padding(.horizontal, 14)
         .onAppear(perform: stageIn)

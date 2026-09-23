@@ -313,3 +313,63 @@ def test_notch_rule_ignores_expanded_and_glance():
     frames = {"leading": {"x": 800, "y": 5, "width": 40, "height": 20}}
     for state in ("expanded", "glance", "hidden"):
         assert [v for v in invariants.check(notch_state(frames, state)) if "overlaps the camera" in v] == []
+
+
+# --- agenda (system Calendar + Reminders) ---
+
+def agenda_state(**agenda):
+    s = copy.deepcopy(BASE_STATE)
+    base = {"events": [], "reminders": [], "nowEvent": None, "nowReminder": None, "pinned": False}
+    base.update(agenda)
+    s["agenda"] = base
+    return s
+
+
+def test_event_now_makes_island_visible_with_agenda_content():
+    s = agenda_state(events=[{"title": "Созвон", "startIn": -60}], nowEvent="Созвон")
+    s.update(state="collapsed", isIslandVisible=True, content="agenda")
+    assert invariants.check(s) == []
+
+
+def test_agenda_outranks_timer_but_not_call():
+    s = agenda_state(reminders=[{"title": "Купить хлеб", "dueIn": -5}], nowReminder="Купить хлеб")
+    s.update(state="collapsed", isIslandVisible=True, content="timer", timerRemaining=30,
+             timer={"id": "t", "title": "", "duration": 60, "paused": False, "remaining": 30})
+    assert any("glance>call>agenda>timer>media" in v for v in invariants.check(s))
+    s["call"] = {"app": "Telegram", "bundleID": "x", "cameraOn": False, "elapsed": 1}
+    s["content"] = "call"
+    assert not any("priority" in v for v in invariants.check(s))
+
+
+def test_agenda_now_hidden_island_is_reported():
+    s = agenda_state(events=[{"title": "Созвон", "startIn": -60}], nowEvent="Созвон")
+    s.update(state="hidden", isIslandVisible=False, content="none")
+    violations = invariants.check(s)
+    assert any("isIslandVisible" in v for v in violations)
+
+
+def test_now_event_must_be_in_todays_list_and_started():
+    s = agenda_state(events=[{"title": "Позже", "startIn": 600}], nowEvent="Позже")
+    s.update(state="collapsed", isIslandVisible=True, content="agenda")
+    assert any("starts in" in v for v in invariants.check(s))
+    s["agenda"]["nowEvent"] = "Призрак"
+    assert any("not among today's events" in v for v in invariants.check(s))
+
+
+def test_pinned_agenda_card_must_be_expanded():
+    s = agenda_state(pinned=True)
+    s.update(state="collapsed", isIslandVisible=True, content="agenda")
+    assert any("opened from the menu" in v for v in invariants.check(s))
+
+
+def test_agenda_tools_forward_to_app(app):
+    server.inject_agenda(events=[{"title": "A", "start_in": 60}], reminders=[{"title": "B", "due_in": -10}])
+    assert app.requests[-1] == ("POST", "/inject/agenda", {"events": [{"title": "A", "start_in": 60}],
+                                                           "reminders": [{"title": "B", "due_in": -10}]})
+    server.clear_agenda()
+    assert app.requests[-1][:2] == ("POST", "/inject/agenda/clear")
+    server.show_agenda()
+    assert app.requests[-1][:2] == ("POST", "/simulate/agenda")
+    server.press_glance_action()
+    assert app.requests[-1][:2] == ("POST", "/simulate/glance-action")
+

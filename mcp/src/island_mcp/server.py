@@ -28,9 +28,12 @@ call rebuild_and_relaunch first if get_state says the debug server is unreachabl
 - Now Playing is system-wide (any app or browser tab; state.nowPlayingSource="system").
   inject_now_playing(bundle_id=...) fakes the source app (its icon shows when there is no artwork);
   send_command drives play/pause/next through the same path as the island's buttons.
-- inject_call / clear_call fake a call (priority: glance > call > timer > media, see state.content);
+- inject_call / clear_call fake a call (priority: glance > call > agenda > timer > media, see state.content);
   set_call_apps makes extra bundle ids count as call apps to exercise REAL mic detection
   (e.g. "com.apple.CoreSpeech" while Siri listens; a call starts after 2s of mic use).
+- Calendar/Reminders come from the system (EventKit; state.agenda.*Authorization). inject_agenda
+  fakes today's events/reminders without touching the user's data (clear_agenda restores);
+  show_agenda opens the «Сегодня» card; press_glance_action presses «Подключиться»/«Выполнено».
 - screenshot_island: crop around the island; frames>1 for animations (fade, spring).
 - check_invariants: after every action, list violated rules (visibility, state machine, geometry).
 - get_logs: in-memory event history (state changes, injections).
@@ -169,6 +172,33 @@ def start_timer(
     if fire:
         body["fire"] = True
     return _post("/simulate/timer", body)
+
+
+@mcp.tool()
+def inject_agenda(events: list[dict] | None = None, reminders: list[dict] | None = None) -> str:
+    """Replace the system Calendar/Reminders with fake data (the user's real ones are untouched).
+    events: [{"title", "start_in": seconds from now (negative = already started), "duration": s,
+    "join": "https://zoom.us/j/1"}]; reminders: [{"title", "due_in": seconds (negative = overdue)}].
+    Heads-up/start/due glances fire on the real schedule (lead time from settings)."""
+    return _post("/inject/agenda", {"events": events or [], "reminders": reminders or []})
+
+
+@mcp.tool()
+def clear_agenda() -> str:
+    """End the agenda injection; the real Calendar/Reminders (EventKit) take over again."""
+    return _post("/inject/agenda/clear")
+
+
+@mcp.tool()
+def show_agenda() -> str:
+    """Open the «Сегодня» agenda card, as the menu bar item does (closes after ~6s unless hovered)."""
+    return _post("/simulate/agenda")
+
+
+@mcp.tool()
+def press_glance_action() -> str:
+    """Press the glance's button («Подключиться» / «Выполнено»)."""
+    return _post("/simulate/glance-action")
 
 
 @mcp.tool()

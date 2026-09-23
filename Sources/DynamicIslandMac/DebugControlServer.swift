@@ -29,6 +29,8 @@ final class DebugControlServer {
     private(set) var isInjectingTimer = false
     /// Set after launch by the app delegate, to hand real timers back.
     weak var systemTimers: SystemTimerMonitor?
+    /// Set after launch; fake agenda is planned through the real monitor.
+    weak var agenda: AgendaMonitor?
 
     private var hoverSimulated = false
     private var realPointerCheck: (() -> Bool)?
@@ -224,6 +226,35 @@ final class DebugControlServer {
             }
             record("simulated timer \(body)")
             return (200, ["ok": true])
+        case ("POST", "/inject/agenda"):
+            return injectAgenda(body)
+        case ("POST", "/inject/agenda/clear"):
+            agenda?.clearInjection()
+            record("agenda injection cleared, EventKit resumed")
+            return (200, ["ok": true])
+        case ("POST", "/simulate/agenda"):
+            model.showAgenda()
+            record("opened agenda card")
+            return (200, ["ok": true, "state": "\(model.state)"])
+        case ("POST", "/debug/test-reminder"):
+            // Real EventKit round trip in a dedicated list (see AgendaMonitor).
+            guard let agenda else { return (500, ["error": "agenda monitor not attached"]) }
+            if body["remove"] as? Bool == true {
+                return (200, agenda.removeTestData())
+            }
+            if let id = body["check"] as? String {
+                return (200, ["completed": agenda.testReminderCompleted(id: id) as Any? ?? NSNull()])
+            }
+            guard let id = agenda.createTestReminder(
+                title: body["title"] as? String ?? "DynamicIsland test",
+                dueIn: body["due_in"] as? Double ?? 60
+            ) else { return (500, ["error": "could not create the test reminder"]) }
+            return (200, ["id": id])
+        case ("POST", "/simulate/glance-action"):
+            guard model.glanceAction != nil else { return (400, ["error": "no glance action"]) }
+            model.performGlanceAction()
+            record("pressed glance action")
+            return (200, ["ok": true])
         case ("POST", "/simulate/lock-preview"):
             lockController?.previewToggle()
             record("toggled lock-screen preview")
@@ -293,6 +324,35 @@ final class DebugControlServer {
 
     /// Hands the pointer check back to the real cursor. Called on hover exit
     /// and on /inject/clear so a simulated tap can't pin the island open.
+    /// Times are relative to now, in seconds: `start_in`, `duration`,
+    /// `due_in` (negative = in the past / overdue).
+    private func injectAgenda(_ body: [String: Any]) -> (Int, [String: Any]) {
+        guard let agenda else { return (500, ["error": "agenda monitor not attached"]) }
+        let now = Date()
+        let rawEvents = body["events"] as? [[String: Any]] ?? []
+        let rawReminders = body["reminders"] as? [[String: Any]] ?? []
+        let events = rawEvents.enumerated().map { index, raw -> AgendaEvent in
+            let start = now.addingTimeInterval(raw["start_in"] as? Double ?? 0)
+            return AgendaEvent(
+                id: "debug-event-\(index)",
+                title: raw["title"] as? String ?? "Событие",
+                start: start,
+                end: start.addingTimeInterval(raw["duration"] as? Double ?? 1800),
+                joinURL: (raw["join"] as? String).flatMap(URL.init(string:))
+            )
+        }
+        let reminders = rawReminders.enumerated().map { index, raw -> AgendaReminder in
+            AgendaReminder(
+                id: "debug-reminder-\(index)",
+                title: raw["title"] as? String ?? "Напоминание",
+                due: (raw["due_in"] as? Double).map { now.addingTimeInterval($0) }
+            )
+        }
+        agenda.inject(events: events, reminders: reminders)
+        record("injected agenda: \(events.count) events, \(reminders.count) reminders")
+        return (200, ["ok": true, "content": model.content.rawValue, "state": "\(model.state)"])
+    }
+
     private func releasePointer() {
         guard hoverSimulated else { return }
         model.pointerIsInsideIsland = realPointerCheck
@@ -347,6 +407,19 @@ final class DebugControlServer {
             } as Any? ?? NSNull(),
             "injectingTimer": isInjectingTimer,
             "glanceTitle": model.glanceTitle as Any? ?? NSNull(),
+            "glanceAction": model.glanceAction?.label as Any? ?? NSNull(),
+            "agenda": [
+                "events": model.agenda.events.map { ["title": $0.title, "startIn": $0.start.timeIntervalSinceNow,
+                                                     "hasJoin": $0.joinURL != nil] },
+                "reminders": model.agenda.reminders.map { ["title": $0.title,
+                                                          "dueIn": $0.due?.timeIntervalSinceNow as Any? ?? NSNull()] },
+                "nowEvent": model.agenda.nowEvent?.title as Any? ?? NSNull(),
+                "nowReminder": model.agenda.nowReminder?.title as Any? ?? NSNull(),
+                "pinned": model.isAgendaPinned,
+                "injecting": agenda?.isInjecting ?? false,
+                "eventsAuthorization": agenda?.eventsAuthorization ?? "unknown",
+                "remindersAuthorization": agenda?.remindersAuthorization ?? "unknown",
+            ] as [String: Any],
             "injecting": isInjecting,
             "injectingCall": isInjectingCall,
             "content": model.content.rawValue,

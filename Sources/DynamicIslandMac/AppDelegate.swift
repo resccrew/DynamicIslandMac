@@ -7,6 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let poller = NowPlayingPoller()
     private let calls = CallMonitor()
     private let systemTimers = SystemTimerMonitor()
+    private let agenda = AgendaMonitor()
     private let settings = IslandSettings.shared
 
     private var islandController: IslandWindowController?
@@ -33,6 +34,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             calls: calls
         )
         debugServer?.systemTimers = systemTimers
+        debugServer?.agenda = agenda
         debugServer?.start()
         #endif
 
@@ -65,6 +67,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 #endif
                 self?.model.systemTimerFired(title: title)
             }
+        )
+
+        // Injected agenda goes through the monitor itself (see
+        // `AgendaMonitor.inject`), so no debug gate is needed here.
+        model.completeReminderHandler = { [weak self] id in
+            self?.agenda.complete(reminderID: id)
+        }
+        agenda.start(
+            onSnapshot: { [weak self] snapshot in self?.model.applyAgenda(snapshot) },
+            onAlert: { [weak self] alert in self?.model.handleAgendaAlert(alert) }
         )
 
         syncStatusItem()
@@ -123,8 +135,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(.separator())
 
         let calendarItem = NSMenuItem(
-            title: "Ближайшее событие",
-            action: #selector(showCalendarGlance),
+            title: "Сегодня",
+            action: #selector(showAgenda),
             keyEquivalent: "e"
         )
         calendarItem.target = self
@@ -140,15 +152,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return item
     }
 
-    @objc private func showCalendarGlance() {
-        CalendarGlanceProvider.fetchNextEvent { [weak self] event in
-            guard let self else { return }
-            guard let event else {
-                self.model.presentGlance(title: "Событий больше нет", subtitle: nil)
-                return
-            }
-            self.model.presentGlance(title: event.title, subtitle: event.timeRange)
-        }
+    @objc private func showAgenda() {
+        model.showAgenda()
     }
 
     @objc private func openSettings() {

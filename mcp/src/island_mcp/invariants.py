@@ -7,9 +7,15 @@ TOLERANCE = 1.0  # points
 
 def check(state: dict[str, Any]) -> list[str]:
     violations: list[str] = []
-    for rule in (_visibility, _content, _state_machine, _window_geometry, _shape_geometry, _playback, _lyrics, _timer, _notch_clear):
+    for rule in (_visibility, _content, _state_machine, _window_geometry, _shape_geometry, _playback, _lyrics, _timer, _notch_clear, _agenda):
         violations.extend(rule(state))
     return violations
+
+
+def _agenda_active(s: dict[str, Any]) -> bool:
+    """An event just started, a reminder just fell due, or the menu opened the agenda card."""
+    agenda = s.get("agenda") or {}
+    return agenda.get("nowEvent") is not None or agenda.get("nowReminder") is not None or bool(agenda.get("pinned"))
 
 
 def _visibility(s: dict[str, Any]) -> list[str]:
@@ -17,11 +23,12 @@ def _visibility(s: dict[str, Any]) -> list[str]:
     title = s.get("title") or ""
     timer = s.get("timerRemaining") is not None
     call = s.get("call") is not None
-    expected_visible = (bool(s.get("isPlaying")) and title != "") or timer or call
+    agenda = _agenda_active(s)
+    expected_visible = (bool(s.get("isPlaying")) and title != "") or timer or call or agenda
     if s.get("isIslandVisible") != expected_visible:
         out.append(
             f"isIslandVisible={s.get('isIslandVisible')} but expected {expected_visible} "
-            f"(isPlaying={s.get('isPlaying')}, title set={title != ''}, timer={timer}, call={call})"
+            f"(isPlaying={s.get('isPlaying')}, title set={title != ''}, timer={timer}, call={call}, agenda={agenda})"
         )
     if s.get("hasContent") != (title != ""):
         out.append(f"hasContent={s.get('hasContent')} but title is {'set' if title else 'empty'}")
@@ -29,7 +36,7 @@ def _visibility(s: dict[str, Any]) -> list[str]:
 
 
 def _content(s: dict[str, Any]) -> list[str]:
-    """The island body follows a fixed priority: glance > call > timer > media."""
+    """The island body follows a fixed priority: glance > call > agenda > timer > media."""
     content = s.get("content")
     if content is None:
         return []
@@ -37,6 +44,8 @@ def _content(s: dict[str, Any]) -> list[str]:
         expected = "glance"
     elif s.get("call") is not None:
         expected = "call"
+    elif _agenda_active(s):
+        expected = "agenda"
     elif s.get("timerRemaining") is not None:
         expected = "timer"
     elif s.get("isPlaying") and s.get("title"):
@@ -45,7 +54,7 @@ def _content(s: dict[str, Any]) -> list[str]:
         # A paused track may still fill a click-opened card.
         expected = "media" if s.get("state") == "expanded" and s.get("hasContent") else "none"
     if content != expected:
-        return [f"content={content} but priority glance>call>timer>media says {expected}"]
+        return [f"content={content} but priority glance>call>agenda>timer>media says {expected}"]
     return []
 
 
@@ -173,3 +182,27 @@ def _lyrics(s: dict[str, Any]) -> list[str]:
     if index is not None and not (0 <= index < count):
         return [f"currentLyricIndex {index} out of range for {count} lines"]
     return []
+
+
+def _agenda(s: dict[str, Any]) -> list[str]:
+    """The "now" items come from today's lists, and the menu-opened card is open."""
+    agenda = s.get("agenda")
+    if not agenda:
+        return []
+    out = []
+    event_titles = [e.get("title") for e in agenda.get("events", [])]
+    reminder_titles = [r.get("title") for r in agenda.get("reminders", [])]
+    now_event = agenda.get("nowEvent")
+    if now_event is not None and now_event not in event_titles:
+        out.append(f"nowEvent '{now_event}' is not among today's events")
+    now_reminder = agenda.get("nowReminder")
+    if now_reminder is not None and now_reminder not in reminder_titles:
+        out.append(f"nowReminder '{now_reminder}' is not among today's reminders")
+    for event in agenda.get("events", []):
+        start_in = event.get("startIn")
+        if start_in is not None and start_in > 0 and event.get("title") == now_event:
+            out.append(f"event '{now_event}' is shown as now but starts in {start_in:.0f}s")
+    if agenda.get("pinned") and s.get("glanceTitle") is None and s.get("state") != "expanded":
+        out.append(f"agenda card opened from the menu but state={s.get('state')}")
+    return out
+
