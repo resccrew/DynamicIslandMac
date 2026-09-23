@@ -182,6 +182,9 @@ final class IslandSettings: ObservableObject {
             islandSize(state: .peek, hasContent: true, notch: notch),
             islandSize(state: .peek, hasContent: false, notch: notch),
             glanceWindowSize,
+            // Timer and call widen the collapsed island; the fixed panel must
+            // hold it, or the hosting view stretches the window off-centre.
+            CGSize(width: wideEarsWidth(notch: notch, peek: true), height: collapsedHeight + peekHeightGrowth),
         ]
         return CGSize(
             width: candidates.map(\.width).max() ?? expandedWindowSize.width,
@@ -198,6 +201,15 @@ final class IslandSettings: ObservableObject {
             width: max(collapsedWidth, 280) + fillet * 2,
             height: collapsedHeight + glanceBodyHeight
         )
+    }
+
+    /// Width of each side ear, beside the camera, for timer and call content:
+    /// room for a 1:05:09 countdown or a call's icon and duration.
+    let wideEar: CGFloat = 64
+
+    /// Island width (fillets included) with `wideEar` on both sides of the notch.
+    func wideEarsWidth(notch: CGSize, peek: Bool) -> CGFloat {
+        notch.width + wideEar * 2 + fillet * 2 + (peek ? peekWidthGrowth : 0)
     }
 
     /// Height of the glance's own row, under the notch-tall strip.

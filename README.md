@@ -36,6 +36,13 @@ Requires Xcode (not just the Command Line Tools) — the lock-screen overlay and
   Skype, Viber, Signal, Webex or a browser (Meet etc.), detected from which process holds the
   microphone (CoreAudio) and whether a camera is on (CoreMediaIO). Shows the app, call duration,
   mic/camera state and an "open" button. Priority in the island: glance > call > timer > media.
+- `SystemTimerMonitor` — the **system Clock (Часы) timer**, started in the Clock app, by Siri or
+  a Shortcut: countdown (1:05:09 past an hour), pause state, title, and a "Таймер завершён" glance
+  when it goes off. Read from `mobiletimerd`'s unified-log entries (`log show` at launch, then
+  `log stream`), since the timer daemon serves only entitled Apple processes; no permissions needed
+  (admin user). Pause/cancel stay in Clock — the card has an "Открыть Часы" button.
+- Collapsed content (media, timer, call) sits only in the two "ears" beside the camera notch,
+  never under it; the timer and call widen the island evenly to fit.
 - `LyricsProvider` — synced lyrics from the open [LRCLIB](https://lrclib.net) API
 
 ## QA / debug MCP
@@ -44,7 +51,7 @@ Debug builds (`./build_app.sh debug`) start a local control server on `127.0.0.1
 (`DebugControlServer.swift`, compiled only under `#if DEBUG` — release builds don't contain it).
 The `mcp/` folder is an MCP server that lets Claude drive and check the running app:
 read state, inject a fake track or call, send play/pause/next through the real source,
-simulate hover/tap/glance/timer/lock-screen preview,
+simulate hover/tap/glance/system timer (seconds/paused/title/fire)/lock-screen preview,
 screenshot the island (including bursts for animations), and check invariants.
 
 ```sh

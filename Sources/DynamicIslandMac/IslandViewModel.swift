@@ -22,6 +22,9 @@ final class IslandViewModel: ObservableObject {
     /// Natural height of the expanded card on screen, measured by the view; the
     /// island hugs it rather than a fixed height with dead space at the bottom.
     @Published var expandedContentHeight: CGFloat?
+    /// Frames of the collapsed content's leading/trailing ears, in island
+    /// coordinates; not published — only the debug server reads them.
+    var collapsedContentFrames: [String: CGRect] = [:]
 
     static let defaultAccent = Color(red: 0.80, green: 0.70, blue: 0.58)
     @Published var accent: Color = IslandViewModel.defaultAccent
@@ -91,41 +94,61 @@ final class IslandViewModel: ObservableObject {
 
     // MARK: - Timer
 
-    /// A user-started countdown, shown in the island in place of Now Playing
-    /// while it runs — the same footprint, different content, the way a
-    /// Live Activity takes over.
+    /// The system Clock's countdown (Часы, Siri, Shortcuts), shown in the
+    /// island in place of Now Playing while it runs — the same footprint,
+    /// different content, the way a Live Activity takes over. With several
+    /// running, the one that goes off soonest.
+    @Published private(set) var systemTimer: SystemTimer?
     @Published private(set) var timerRemaining: TimeInterval?
     @Published private(set) var timerTotal: TimeInterval = 0
     private var timerTick: Timer?
 
     var isTimerActive: Bool { timerRemaining != nil }
+    var isTimerPaused: Bool { systemTimer?.isPaused ?? false }
+    var timerTitle: String { systemTimer?.title ?? "" }
 
-    func startTimer(minutes: Double) {
-        let seconds = minutes * 60
-        timerTotal = seconds
-        timerRemaining = seconds
-        Haptics.hover()
+    func applySystemTimers(_ timers: [SystemTimer]) {
+        let now = Date()
+        // Running before paused; among them, least time left.
+        let next = timers.min { a, b in
+            if a.isPaused != b.isPaused { return !a.isPaused }
+            return a.remaining(at: now) < b.remaining(at: now)
+        }
+        guard next != systemTimer else { return }
+        systemTimer = next
+        timerTotal = next?.duration ?? 0
+        refreshTimerRemaining()
         sync()
 
         timerTick?.invalidate()
-        timerTick = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-            guard let self, var remaining = self.timerRemaining else { return }
-            remaining -= 1
-            if remaining <= 0 {
-                self.cancelTimer()
-                self.presentGlance(title: "Таймер завершён", subtitle: nil, symbol: "timer")
-            } else {
-                self.timerRemaining = remaining
-            }
+        timerTick = nil
+        guard let next, !next.isPaused else { return }
+        // Counted from the fire date, never decremented, so it cannot drift
+        // from the Clock app.
+        timerTick = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
+            self?.refreshTimerRemaining()
         }
     }
 
-    func cancelTimer() {
-        timerTick?.invalidate()
-        timerTick = nil
-        timerRemaining = nil
-        timerTotal = 0
-        sync()
+    /// A system timer went off.
+    func systemTimerFired(title: String) {
+        presentGlance(title: "Таймер завершён", subtitle: title.isEmpty ? nil : title, symbol: "timer")
+    }
+
+    /// The system Clock can't be driven from here (its daemon only serves
+    /// entitled Apple processes), so the card hands off to the app.
+    func openClock() {
+        NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/Clock.app"))
+    }
+
+    private func refreshTimerRemaining() {
+        guard let timer = systemTimer else {
+            timerRemaining = nil
+            return
+        }
+        // Whole seconds rounded up, like the Clock app: 0:01 until it fires.
+        let remaining = timer.remaining().rounded(.up)
+        if remaining != timerRemaining { timerRemaining = remaining }
     }
 
     // MARK: - Calendar glance
@@ -424,8 +447,20 @@ extension IslandViewModel {
     /// controller's pointer hit-test, so both agree on the hugging height.
     func islandSize(settings: IslandSettings, notch: CGSize) -> CGSize {
         let size = settings.islandSize(state: state, hasContent: isIslandVisible, notch: notch)
-        guard state == .expanded, glanceTitle == nil,
-              let height = expandedContentHeight else { return size }
-        return CGSize(width: size.width, height: height)
+        switch state {
+        case .expanded:
+            guard glanceTitle == nil, let height = expandedContentHeight else { return size }
+            return CGSize(width: size.width, height: height)
+        case .collapsed, .peek:
+            // A countdown or call duration is wider than the ear beside the
+            // camera at the media width; widen both ears evenly rather than
+            // let it slide under the notch.
+            guard content == .timer || content == .call else { return size }
+            let wide = settings.wideEarsWidth(notch: notch, peek: state == .peek)
+            return CGSize(width: max(size.width, wide), height: size.height)
+        default:
+            return size
+        }
     }
+
 }

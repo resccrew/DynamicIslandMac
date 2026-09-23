@@ -25,6 +25,10 @@ final class DebugControlServer {
     private(set) var isInjecting = false
     /// Same for the call monitor while a call is injected.
     private(set) var isInjectingCall = false
+    /// Same for the system Clock timers while a timer is injected.
+    private(set) var isInjectingTimer = false
+    /// Set after launch by the app delegate, to hand real timers back.
+    weak var systemTimers: SystemTimerMonitor?
 
     private var hoverSimulated = false
     private var realPointerCheck: (() -> Bool)?
@@ -195,10 +199,28 @@ final class DebugControlServer {
             record("simulated glance")
             return (200, ["ok": true])
         case ("POST", "/simulate/timer"):
+            // Injects a system-Clock-like timer; the real monitor is muted
+            // until cancel, which hands the real timers back.
             if body["cancel"] as? Bool == true {
-                model.cancelTimer()
+                isInjectingTimer = false
+                model.applySystemTimers([])
+                systemTimers?.republish()
+            } else if body["fire"] as? Bool == true {
+                isInjectingTimer = true
+                model.applySystemTimers([])
+                model.systemTimerFired(title: body["title"] as? String ?? "")
             } else {
-                model.startTimer(minutes: (body["minutes"] as? Double) ?? 1)
+                isInjectingTimer = true
+                let seconds = (body["seconds"] as? Double)
+                    ?? ((body["minutes"] as? Double) ?? 1) * 60
+                let paused = body["paused"] as? Bool == true
+                model.applySystemTimers([SystemTimer(
+                    id: "debug-timer",
+                    title: body["title"] as? String ?? "",
+                    duration: (body["duration"] as? Double) ?? seconds,
+                    fireDate: paused ? nil : Date().addingTimeInterval(seconds),
+                    pausedRemaining: paused ? seconds : nil
+                )])
             }
             record("simulated timer \(body)")
             return (200, ["ok": true])
@@ -314,6 +336,16 @@ final class DebugControlServer {
             "lockPresentation": "\(model.lockPresentation)",
             "isLockScreenVisible": model.isLockScreenVisible,
             "timerRemaining": model.timerRemaining as Any? ?? NSNull(),
+            "timer": model.systemTimer.map { timer -> [String: Any] in
+                [
+                    "id": timer.id,
+                    "title": timer.title,
+                    "duration": timer.duration,
+                    "paused": timer.isPaused,
+                    "remaining": timer.remaining(),
+                ]
+            } as Any? ?? NSNull(),
+            "injectingTimer": isInjectingTimer,
             "glanceTitle": model.glanceTitle as Any? ?? NSNull(),
             "injecting": isInjecting,
             "injectingCall": isInjectingCall,
@@ -356,7 +388,17 @@ final class DebugControlServer {
             ]
         }
         if let rect = islandController?.debugIslandScreenRect {
-            result["islandShapeRect"] = topLeft(rect, in: screenFrame)
+            let shape = topLeft(rect, in: screenFrame)
+            result["islandShapeRect"] = shape
+            // Collapsed ears' drawn content, in the same top-left screen points.
+            if let x = shape["x"], let y = shape["y"] {
+                result["contentFrames"] = model.collapsedContentFrames.mapValues { frame -> [String: Double] in
+                    [
+                        "x": x + frame.minX, "y": y + frame.minY,
+                        "width": frame.width, "height": frame.height,
+                    ]
+                }
+            }
         }
         if let window = lockController?.window {
             result["lockWindow"] = [

@@ -7,7 +7,7 @@ TOLERANCE = 1.0  # points
 
 def check(state: dict[str, Any]) -> list[str]:
     violations: list[str] = []
-    for rule in (_visibility, _content, _state_machine, _window_geometry, _shape_geometry, _playback, _lyrics):
+    for rule in (_visibility, _content, _state_machine, _window_geometry, _shape_geometry, _playback, _lyrics, _timer, _notch_clear):
         violations.extend(rule(state))
     return violations
 
@@ -67,6 +67,51 @@ def _state_machine(s: dict[str, Any]) -> list[str]:
         out.append("state=expanded with nothing to show")
     if state == "expanded" and not s.get("isIslandVisible") and not hovering:
         out.append("paused card is still expanded after the pointer left")
+    return out
+
+
+def _timer(s: dict[str, Any]) -> list[str]:
+    """The system Clock timer and its countdown agree."""
+    timer = s.get("timer")
+    remaining = s.get("timerRemaining")
+    if "timer" not in s:
+        return []
+    out = []
+    if (timer is None) != (remaining is None):
+        out.append(f"timer={timer} but timerRemaining={remaining}")
+        return out
+    if timer is None:
+        return out
+    if remaining < 0:
+        out.append(f"timerRemaining={remaining} is negative")
+    duration = timer.get("duration") or 0
+    if duration and remaining > duration + 1:
+        out.append(f"timerRemaining={remaining} exceeds the timer's duration {duration}")
+    if abs(remaining - timer.get("remaining", remaining)) > 1.5:
+        out.append(f"shown {remaining}s drifts from the timer's {timer.get('remaining')}s")
+    return out
+
+
+def _notch_clear(s: dict[str, Any]) -> list[str]:
+    """Collapsed content must sit in the ears beside the camera, never under it.
+    Screenshots don't show the physical notch, so this is checked on geometry."""
+    notch = s.get("notchRect")
+    frames = s.get("contentFrames") or {}
+    if not notch or s.get("state") not in ("collapsed", "peek"):
+        return []
+    out = []
+    n_left, n_right = notch["x"], notch["x"] + notch["width"]
+    n_bottom = notch["y"] + notch["height"]
+    for name, f in frames.items():
+        left, right = f["x"], f["x"] + f["width"]
+        top, bottom = f["y"], f["y"] + f["height"]
+        overlap_x = min(right, n_right) - max(left, n_left)
+        overlap_y = min(bottom, n_bottom) - max(top, notch["y"])
+        if overlap_x > 0.5 and overlap_y > 0.5:
+            out.append(
+                f"{name} content x={left:.1f}..{right:.1f} overlaps the camera notch "
+                f"x={n_left:.1f}..{n_right:.1f} by {overlap_x:.1f}pt"
+            )
     return out
 
 

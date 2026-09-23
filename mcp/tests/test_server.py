@@ -238,3 +238,78 @@ def test_content_media_and_none():
     s.update(isPlaying=False, isIslandVisible=False, state="hidden", content="none")
     s["islandShapeRect"] = dict(BASE_STATE["islandShapeRect"])
     assert invariants.check(s) == []
+
+
+# --- system Clock timer ---
+
+def timer_state(**timer):
+    s = copy.deepcopy(BASE_STATE)
+    t = {"id": "x", "title": "", "duration": 300, "paused": False, "remaining": 120}
+    t.update(timer)
+    s.update(timerRemaining=round(t["remaining"]), timer=t, isIslandVisible=True,
+             state="collapsed", content="timer")
+    s["islandShapeRect"] = playing_state()["islandShapeRect"]
+    return s
+
+
+def test_system_timer_consistent_state_passes():
+    assert invariants.check(timer_state()) == []
+    assert invariants.check(timer_state(paused=True, remaining=42)) == []
+
+
+def test_system_timer_mismatch_is_reported():
+    s = timer_state()
+    s["timerRemaining"] = None
+    assert any("timerRemaining" in v for v in invariants.check(s))
+    s = timer_state()
+    s["timer"] = None
+    assert any("timer=None" in v for v in invariants.check(s))
+
+
+def test_system_timer_drift_and_bounds():
+    s = timer_state(remaining=100)
+    s["timerRemaining"] = 110
+    assert any("drifts" in v for v in invariants.check(s))
+    s = timer_state(duration=60, remaining=90)
+    assert any("exceeds" in v for v in invariants.check(s))
+
+
+def test_start_timer_forwards_system_timer_options(app):
+    server.start_timer(seconds=12, paused=True, title="Паста")
+    method, path, body = app.requests[-1]
+    assert path == "/simulate/timer"
+    assert body["seconds"] == 12 and body["paused"] is True and body["title"] == "Паста"
+    server.start_timer(fire=True)
+    assert app.requests[-1][2]["fire"] is True
+    server.start_timer(cancel=True)
+    assert app.requests[-1][2]["cancel"] is True
+
+
+# --- nothing under the camera notch ---
+
+def notch_state(frames, state="collapsed"):
+    s = playing_state()
+    s["state"] = state
+    s["notchRect"] = {"x": 751, "y": 0, "width": 208, "height": 37.5}
+    s["contentFrames"] = frames
+    return s
+
+
+def test_content_in_the_ears_passes():
+    frames = {
+        "leading": {"x": 723, "y": 6, "width": 26, "height": 26},
+        "trailing": {"x": 965, "y": 12, "width": 30, "height": 14},
+    }
+    assert [v for v in invariants.check(notch_state(frames)) if "overlaps the camera" in v] == []
+
+
+def test_countdown_under_the_notch_is_reported():
+    frames = {"trailing": {"x": 940, "y": 12, "width": 40, "height": 16}}
+    violations = [v for v in invariants.check(notch_state(frames)) if "overlaps the camera" in v]
+    assert violations and "trailing" in violations[0]
+
+
+def test_notch_rule_ignores_expanded_and_glance():
+    frames = {"leading": {"x": 800, "y": 5, "width": 40, "height": 20}}
+    for state in ("expanded", "glance", "hidden"):
+        assert [v for v in invariants.check(notch_state(frames, state)) if "overlaps the camera" in v] == []
