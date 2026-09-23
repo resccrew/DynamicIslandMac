@@ -55,7 +55,6 @@ struct SettingsView: View {
 
             section("Развёрнутый вид") {
                 slider("Ширина", $settings.expandedWidth, 260...900)
-                slider("Высота", $settings.expandedHeight, 120...420)
                 slider("Обложка", $settings.expandedArtwork, 30...140)
                 slider("Отступ по краям", $settings.expandedPadding, 0...60)
                 slider("Отступ сверху", $settings.expandedTopPadding, 0...50)
