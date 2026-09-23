@@ -111,11 +111,7 @@ final class IslandWindowController: NSWindowController {
     /// coordinates put the origin at the bottom-left, so it sits at the top.
     private func islandRectInWindow(panel: NSWindow) -> CGRect {
         let container = panel.frame.size
-        let island = settings.islandSize(
-            state: model.state,
-            hasContent: model.isIslandVisible,
-            notch: ScreenNotch.size(for: panel.screen)
-        )
+        let island = model.islandSize(settings: settings, notch: ScreenNotch.size(for: panel.screen))
         return CGRect(
             x: (container.width - island.width) / 2,
             y: container.height - island.height,

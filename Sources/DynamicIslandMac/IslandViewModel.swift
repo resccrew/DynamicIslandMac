@@ -19,6 +19,10 @@ final class IslandViewModel: ObservableObject {
     @Published var title: String = ""
     @Published var artist: String = ""
     @Published var artwork: NSImage? = nil
+    /// Natural height of the expanded card on screen, measured by the view; the
+    /// island hugs it rather than a fixed height with dead space at the bottom.
+    @Published var expandedContentHeight: CGFloat?
+
     static let defaultAccent = Color(red: 0.80, green: 0.70, blue: 0.58)
     @Published var accent: Color = IslandViewModel.defaultAccent
     @Published var isPlaying: Bool = false
@@ -412,5 +416,16 @@ final class IslandViewModel: ObservableObject {
         } else {
             stopPointerWatchdog()
         }
+    }
+}
+
+extension IslandViewModel {
+    /// The island's on-screen size. Shared by the view and by the window
+    /// controller's pointer hit-test, so both agree on the hugging height.
+    func islandSize(settings: IslandSettings, notch: CGSize) -> CGSize {
+        let size = settings.islandSize(state: state, hasContent: isIslandVisible, notch: notch)
+        guard state == .expanded, glanceTitle == nil,
+              let height = expandedContentHeight else { return size }
+        return CGSize(width: size.width, height: height)
     }
 }

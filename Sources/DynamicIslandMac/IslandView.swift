@@ -28,11 +28,7 @@ struct IslandView: View {
     /// Anchored to the top of a fixed-size panel, so growing downward never
     /// opens a gap against the screen edge.
     private var islandSize: CGSize {
-        settings.islandSize(
-            state: model.state,
-            hasContent: model.isIslandVisible,
-            notch: ScreenNotch.size()
-        )
+        model.islandSize(settings: settings, notch: ScreenNotch.size())
     }
 
     private var island: some View {
@@ -78,6 +74,13 @@ struct IslandView: View {
             }
         }
         .clipShape(shape)
+        // One observer for all cards: a card inserted fresh doesn't report its
+        // initial height to an observer of its own, so it would inherit the
+        // previous card's size.
+        .onPreferenceChange(ExpandedHeightKey.self) { value in
+            guard value > 0 else { return }
+            model.expandedContentHeight = value
+        }
         // Forces a full re-rasterization on every change instead of an
         // incremental CALayer-mask update. Without this, the shape can be
         // pixel-correct in a fresh screen capture while the *live* on-screen
@@ -196,9 +199,7 @@ struct IslandView: View {
                 .buttonStyle(.plain)
             }
         }
-        .padding(.horizontal, settings.expandedPadding + settings.fillet)
-        .padding(.top, settings.expandedTopPadding)
-        .padding(.bottom, settings.expandedTopPadding)
+        .expandedCard(settings: settings)
     }
 
     /// Ticks on its own, so the rest of the island isn't re-rendered every second.
@@ -277,9 +278,7 @@ struct IslandView: View {
             }
             .buttonStyle(.plain)
         }
-        .padding(.horizontal, settings.expandedPadding + settings.fillet)
-        .padding(.top, settings.expandedTopPadding)
-        .padding(.bottom, settings.expandedTopPadding)
+        .expandedCard(settings: settings)
     }
 
     private var timerFraction: CGFloat {
@@ -314,13 +313,17 @@ struct IslandView: View {
 
             progressRow
         }
-        .padding(.horizontal, settings.expandedPadding + settings.fillet)
-        .padding(.top, settings.expandedTopPadding)
-        .padding(.bottom, settings.expandedTopPadding)
+        .expandedCard(settings: settings)
     }
 
+    /// Elapsed, bar and remaining on one line, like the iOS player.
     private var progressRow: some View {
-        VStack(spacing: 6) {
+        HStack(spacing: 8) {
+            Text(formatTime(model.position))
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(.white.opacity(0.45))
+                .monospacedDigit()
+
             GeometryReader { proxy in
                 ZStack(alignment: .leading) {
                     Capsule().fill(Color.white.opacity(0.22))
@@ -331,23 +334,16 @@ struct IslandView: View {
             }
             .frame(height: 4)
 
-            HStack {
-                Text(formatTime(model.position))
+            if model.duration > 0 {
+                Text("-\(formatTime(max(0, model.duration - model.position)))")
                     .font(.system(size: 11, weight: .medium))
-                    .foregroundColor(.white.opacity(0.4))
+                    .foregroundColor(.white.opacity(0.45))
                     .monospacedDigit()
-                Spacer(minLength: 0)
-                if model.duration > 0 {
-                    Text("-\(formatTime(max(0, model.duration - model.position)))")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(.white.opacity(0.4))
-                        .monospacedDigit()
-                } else {
-                    // Live streams (YouTube/Twitch live) have no length.
-                    Text("LIVE")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundColor(.red.opacity(0.85))
-                }
+            } else {
+                // Live streams (YouTube/Twitch live) have no length.
+                Text("LIVE")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(.red.opacity(0.85))
             }
         }
     }
@@ -416,5 +412,28 @@ struct IslandView: View {
 
     private func artworkView(size: CGFloat) -> some View {
         FlipArtwork(image: model.displayArtwork, trackKey: model.trackKey, size: size)
+    }
+}
+
+private struct ExpandedHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+private extension View {
+    /// Shared frame of the expanded cards: content starts just under the
+    /// camera cutout, sits at the top, and reports its natural height.
+    func expandedCard(settings: IslandSettings) -> some View {
+        self
+            .padding(.horizontal, settings.expandedPadding + settings.fillet)
+            .padding(.top, ScreenNotch.size().height + settings.expandedTopPadding * 0.5)
+            .padding(.bottom, settings.expandedTopPadding)
+            .fixedSize(horizontal: false, vertical: true)
+            .background(GeometryReader { proxy in
+                Color.clear.preference(key: ExpandedHeightKey.self, value: proxy.size.height)
+            })
+            .frame(maxHeight: .infinity, alignment: .top)
     }
 }
