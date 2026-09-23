@@ -35,13 +35,22 @@ Requires Xcode (not just the Command Line Tools) — the lock-screen overlay and
 - `CallMonitor` — ongoing calls in Telegram, FaceTime, Zoom, Discord, WhatsApp, Slack, Teams,
   Skype, Viber, Signal, Webex or a browser (Meet etc.), detected from which process holds the
   microphone (CoreAudio) and whether a camera is on (CoreMediaIO). Shows the app, call duration,
-  mic/camera state and an "open" button. Priority in the island: glance > call > timer > media.
+  mic/camera state and an "open" button. Priority in the island:
+  glance > call > calendar/reminder now > timer > media.
 - `SystemTimerMonitor` — the **system Clock (Часы) timer**, started in the Clock app, by Siri or
   a Shortcut: countdown (1:05:09 past an hour), pause state, title, and a "Таймер завершён" glance
   when it goes off. Read from `mobiletimerd`'s unified-log entries (`log show` at launch, then
   `log stream`), since the timer daemon serves only entitled Apple processes; no permissions needed
   (admin user). Pause/cancel stay in Clock — the card has an "Открыть Часы" button.
-- Collapsed content (media, timer, call) sits only in the two "ears" beside the camera notch,
+- `AgendaMonitor` — the **system Calendar and Reminders** (every account added to macOS: iCloud,
+  Google, Exchange…) via EventKit, event-driven (`EKEventStoreChanged` + one timer per moment, no
+  polling). A heads-up N minutes before an event (default 5, in settings), «Сейчас: …» at its start
+  with a join button when the event has a Zoom / Meet / Teams / Telemost / Webex link, and a glance
+  with «Выполнено» when a reminder falls due (ticks it off in Reminders). Tap the island, or the
+  menu bar's «Сегодня», for the agenda card: what's on now, the rest of today's events and today's
+  and overdue reminders. All-day and declined events are skipped. macOS asks once for Calendar and
+  Reminders access.
+- Collapsed content (media, timer, call, calendar) sits only in the two "ears" beside the camera notch,
   never under it; the timer and call widen the island evenly to fit.
 - `LyricsProvider` — synced lyrics from the open [LRCLIB](https://lrclib.net) API
 
@@ -50,7 +59,8 @@ Requires Xcode (not just the Command Line Tools) — the lock-screen overlay and
 Debug builds (`./build_app.sh debug`) start a local control server on `127.0.0.1:47800`
 (`DebugControlServer.swift`, compiled only under `#if DEBUG` — release builds don't contain it).
 The `mcp/` folder is an MCP server that lets Claude drive and check the running app:
-read state, inject a fake track or call, send play/pause/next through the real source,
+read state, inject a fake track, call or agenda (events/reminders — the user's real ones stay
+untouched), send play/pause/next through the real source, press a glance's button,
 simulate hover/tap/glance/system timer (seconds/paused/title/fire)/lock-screen preview,
 screenshot the island (including bursts for animations), and check invariants.
 

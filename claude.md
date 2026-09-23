@@ -132,13 +132,8 @@ side-проекта — нет опасных force-unwrap, нет пустых 
 Добавлено — обе фичи занимают тот же footprint острова (то же окно/форма), просто разный контент:
 - **Таймер — СИСТЕМНЫЙ, из приложения «Часы»** (2026-09-23; свой таймер из меню-бара удалён по
   просьбе пользователя). См. раздел «Системный таймер» ниже.
-- **Календарь — «ближайшее событие»** (`CalendarGlanceProvider.swift`, `EKEventStore`, один запрос,
-  best-effort/graceful-fallback как у `LyricsProvider`) — по клику в меню-баре показывает
-  `GlanceView` с названием и временем ближайшего события на 4 секунды, тем же transient-механизмом,
-  что раньше был у device-уведомлений (`IslandViewModel.presentGlance`/`glanceTitle`/`glanceTimer`).
-  Если событий нет — глянец "Событий больше нет". Требует `NSCalendarsFullAccessUsageDescription`
-  в `build_app.sh`'s Info.plist (возвращено после того, как было убрано вместе со старой,
-  отменённой веткой календаря-колонки).
+- **Календарь и напоминания — системные**, см. раздел «Календарь и Напоминания» ниже (старый
+  `CalendarGlanceProvider` / глянец «Ближайшее событие» удалены 2026-09-23).
 - Приоритет контента при одновременной активности: `glance` (проверка календаря) > `timer` >
   Now Playing. Раньше на этом месте стоял `notice` с тем же приоритетом — просто заменили источник.
 
@@ -306,6 +301,42 @@ fire date раз в 0.25с (не декремент — не дрейфует), 
 (`ContentFrameKey`, до отступов, `fixedSize`) → `IslandViewModel.collapsedContentFrames` → `/state`
 `contentFrames` → инвариант MCP `_notch_clear` («overlaps the camera notch»). Музыка: обложка
 заканчивается за 2pt до выреза — тесно, но без пересечения.
+
+## Календарь и Напоминания (2026-09-23)
+Всё из системы через EventKit (`AgendaMonitor.swift`) — любые аккаунты, добавленные в macOS.
+- Доступ: `requestFullAccessToEvents`, затем `requestFullAccessToReminders` — строго по очереди,
+  чтобы два системных запроса не наложились. Ключи Info.plist `NSCalendarsFullAccessUsageDescription`
+  и `NSRemindersFullAccessUsageDescription` (`build_app.sh`). На этой машине оба выданы.
+- Без поллинга: перезагрузка по `EKEventStoreChanged`, `NSCalendarDayChanged`, пробуждению и
+  изменению настроек; дальше по одному `Timer` (RunLoop `.common`) на каждый момент: предупреждение
+  за `eventLeadMinutes` (по умолчанию 5), начало события, срок напоминания, конец окна «сейчас»
+  (`nowWindow` = 10 мин), конец события. Опоздавшие после сна колбэки гасятся проверкой времени.
+- Фильтр событий: без all-day, отменённых и тех, где текущий пользователь отказался.
+- Ссылка на созвон: `NSDataDetector` по url/location/notes, хосты zoom.us, meet.google.com,
+  teams.microsoft.com/teams.live.com, telemost.yandex.*, webex.com.
+- Модель: `agenda: AgendaSnapshot` (events, reminders, nowEvent, nowReminder), `isAgendaNow`,
+  `isAgendaPinned` (меню «Сегодня», закрывается через 6с без курсора / по уходу курсора / по клику).
+  `isIslandVisible` включает `isAgendaNow || isAgendaPinned`. Приоритет контента:
+  **glance > call > agenda > timer > media**.
+- Glance с кнопкой: `presentGlance(..., action: GlanceAction)` — живёт 8с вместо 4. «Подключиться»
+  открывает ссылку, «Выполнено» ставит `isCompleted` через EventKit (`AgendaMonitor.complete`).
+- Свёрнутый вид: только в «ушах» (иконка слева, время начала/срока справа), широкие уши как у
+  таймера. Раскрытый: заголовок «сейчас» с круглой кнопкой-иконкой (📹/✓ — текстовая кнопка
+  обрезала название), дальше до 3 событий и до 4 напоминаний (просроченные красным).
+- Панель острова теперь минимум `IslandSettings.maxExpandedCardHeight` (260pt) в высоту: карточки
+  по содержимому выше `expandedHeight` (по умолчанию 148 — музыка ≈158 обрезалась бы на чистой
+  установке); панель вне формы прозрачна для кликов, так что лишняя высота ничего не стоит.
+- QA: `/inject/agenda` (события/напоминания относительно «сейчас», через тот же планировщик
+  монитора), `/inject/agenda/clear`, `/simulate/agenda`, `/simulate/glance-action`,
+  `/debug/test-reminder` (DEBUG: реальный цикл EventKit в отдельном списке «DynamicIsland QA»,
+  `remove` удаляет список). В `/state` — `agenda.*` и статусы доступа. MCP: `inject_agenda`,
+  `clear_agenda`, `show_agenda`, `press_glance_action`; инвариант `_agenda`.
+- Проверено вживую: предупреждение за 5 мин с «Подключиться», «Сейчас: …» в момент начала,
+  срок напоминания → «Выполнено» → напоминание реально отмечено в системе и пропало из списка,
+  приоритеты против таймера и звонка, карточка «Сегодня» из меню и её автозакрытие.
+- Ограничения: показываются только сегодняшние события; `/debug/test-reminder` в первый раз
+  (когда список «DynamicIsland QA» только создаётся) иногда возвращает ошибку — повторный вызов
+  проходит (только DEBUG-хелпер, на приложение не влияет).
 
 ## Зоны ответственности агентов в этом проекте
 - **Planner** — приоритизация находок аудита, разбивка на фичи/фиксы.

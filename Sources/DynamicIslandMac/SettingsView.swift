@@ -100,6 +100,17 @@ struct SettingsView: View {
                 hint("Тексты берутся с lrclib.net — туда уходят название трека и исполнитель.")
             }
 
+            section("Календарь и напоминания") {
+                Toggle("События календаря", isOn: $settings.calendarEnabled)
+                    .font(.system(size: 12))
+                if settings.calendarEnabled {
+                    slider("Предупреждать за, минут", $settings.eventLeadMinutes, 1...30)
+                }
+                Toggle("Напоминания", isOn: $settings.remindersEnabled)
+                    .font(.system(size: 12))
+                hint("Берётся из системных «Календаря» и «Напоминаний», включая iCloud и Google.")
+            }
+
             section("Питание") {
                 Toggle("Не гасить экран при блокировке", isOn: $settings.preventSleepOnLock)
                     .font(.system(size: 12))

@@ -52,6 +52,13 @@ final class IslandSettings: ObservableObject {
     /// Fetching lyrics sends the track title and artist to lrclib.net.
     @Published var lyricsEnabled: Bool { didSet { persist() } }
 
+    /// System Calendar events: a heads-up before they start and at the start.
+    @Published var calendarEnabled: Bool { didSet { persist() } }
+    /// System Reminders: shown when due, with a «Выполнено» button.
+    @Published var remindersEnabled: Bool { didSet { persist() } }
+    /// How many minutes before an event the heads-up appears.
+    @Published var eventLeadMinutes: Double { didSet { persist() } }
+
     /// Keep the display awake while locked, and for how long.
     @Published var preventSleepOnLock: Bool { didSet { persist() } }
     @Published var preventSleepMinutes: Double { didSet { persist() } }
@@ -97,6 +104,9 @@ final class IslandSettings: ObservableObject {
         static let lockScreenOffsetY = 230.0
         static let lockCardLightTheme = true
         static let lyricsEnabled = true
+        static let calendarEnabled = true
+        static let remindersEnabled = true
+        static let eventLeadMinutes = 5.0
         static let preventSleepOnLock = false
         static let preventSleepMinutes = 10.0
         static let showStatusIcon = true
@@ -140,6 +150,11 @@ final class IslandSettings: ObservableObject {
         lockCardLightTheme = UserDefaults.standard.object(forKey: "lockCardLightTheme") as? Bool
             ?? Defaults.lockCardLightTheme
         lyricsEnabled = UserDefaults.standard.object(forKey: "lyricsEnabled") as? Bool ?? Defaults.lyricsEnabled
+        calendarEnabled = UserDefaults.standard.object(forKey: "calendarEnabled") as? Bool
+            ?? Defaults.calendarEnabled
+        remindersEnabled = UserDefaults.standard.object(forKey: "remindersEnabled") as? Bool
+            ?? Defaults.remindersEnabled
+        eventLeadMinutes = Self.read("eventLeadMinutes", Defaults.eventLeadMinutes)
         preventSleepOnLock = UserDefaults.standard.object(forKey: "preventSleepOnLock") as? Bool
             ?? Defaults.preventSleepOnLock
         preventSleepMinutes = Self.read("preventSleepMinutes", Defaults.preventSleepMinutes)
@@ -175,6 +190,9 @@ final class IslandSettings: ObservableObject {
     /// only the shape inside grows, anchored to the top edge. Animating the
     /// window frame instead makes AppKit scale the captured content, which
     /// briefly leaves a gap above the island.
+    /// Tallest card the panel must hold without clipping.
+    static let maxExpandedCardHeight: CGFloat = 260
+
     func containerSize(notch: CGSize) -> CGSize {
         let candidates: [CGSize] = [
             expandedWindowSize,
@@ -185,6 +203,10 @@ final class IslandSettings: ObservableObject {
             // Timer and call widen the collapsed island; the fixed panel must
             // hold it, or the hosting view stretches the window off-centre.
             CGSize(width: wideEarsWidth(notch: notch, peek: true), height: collapsedHeight + peekHeightGrowth),
+            // Expanded cards hug their content (music ≈ 158pt, agenda up to
+            // ≈ 240pt), which can outgrow `expandedHeight`. The panel is
+            // click-through outside the shape, so extra height costs nothing.
+            CGSize(width: expandedWindowSize.width, height: Self.maxExpandedCardHeight),
         ]
         return CGSize(
             width: candidates.map(\.width).max() ?? expandedWindowSize.width,
@@ -269,6 +291,9 @@ final class IslandSettings: ObservableObject {
         lockScreenOffsetY = Defaults.lockScreenOffsetY
         lockCardLightTheme = Defaults.lockCardLightTheme
         lyricsEnabled = Defaults.lyricsEnabled
+        calendarEnabled = Defaults.calendarEnabled
+        remindersEnabled = Defaults.remindersEnabled
+        eventLeadMinutes = Defaults.eventLeadMinutes
         preventSleepOnLock = Defaults.preventSleepOnLock
         preventSleepMinutes = Defaults.preventSleepMinutes
         showStatusIcon = Defaults.showStatusIcon
@@ -311,6 +336,9 @@ final class IslandSettings: ObservableObject {
         d.set(lockScreenOffsetY, forKey: "lockScreenOffsetY")
         d.set(lockCardLightTheme, forKey: "lockCardLightTheme")
         d.set(lyricsEnabled, forKey: "lyricsEnabled")
+        d.set(calendarEnabled, forKey: "calendarEnabled")
+        d.set(remindersEnabled, forKey: "remindersEnabled")
+        d.set(eventLeadMinutes, forKey: "eventLeadMinutes")
         d.set(preventSleepOnLock, forKey: "preventSleepOnLock")
         d.set(preventSleepMinutes, forKey: "preventSleepMinutes")
         d.set(showStatusIcon, forKey: "showStatusIcon")

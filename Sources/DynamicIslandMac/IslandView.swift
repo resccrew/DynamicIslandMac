@@ -43,7 +43,9 @@ struct IslandView: View {
                     title: title,
                     subtitle: model.glanceSubtitle,
                     symbol: model.glanceSymbol,
-                    accent: model.accent
+                    accent: glanceAccent,
+                    actionLabel: model.glanceAction?.label,
+                    onAction: { model.performGlanceAction() }
                 )
                     // Keep the text clear of the camera cutout.
                     .padding(.top, settings.collapsedHeight)
@@ -55,6 +57,14 @@ struct IslandView: View {
                         .transition(.opacity)
                 } else {
                     callCollapsedContent(call)
+                        .transition(.opacity)
+                }
+            } else if model.content == .agenda {
+                if model.isExpanded {
+                    agendaExpandedContent
+                        .transition(.opacity)
+                } else {
+                    agendaCollapsedContent
                         .transition(.opacity)
                 }
             } else if model.isTimerActive {
@@ -324,6 +334,163 @@ struct IslandView: View {
             .buttonStyle(.plain)
         }
         .expandedCard(settings: settings)
+    }
+
+    // MARK: - Agenda
+
+    /// Calendar.app's red and Reminders' blue, so each reads as its own app.
+    static let calendarRed = Color(red: 1.0, green: 0.27, blue: 0.23)
+    static let remindersBlue = Color(red: 0.04, green: 0.52, blue: 1.0)
+
+    private var glanceAccent: Color {
+        switch model.glanceSymbol {
+        case "checklist": return Self.remindersBlue
+        case "calendar", "calendar.badge.clock": return Self.calendarRed
+        default: return model.accent
+        }
+    }
+
+    private var agendaCollapsedContent: some View {
+        earsRow {
+            Image(systemName: model.agenda.nowEvent != nil ? "calendar" : "checklist")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(model.agenda.nowEvent != nil ? Self.calendarRed : Self.remindersBlue)
+        } trailing: {
+            Text(agendaCollapsedTime)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(.white)
+                .monospacedDigit()
+                .lineLimit(1)
+        }
+    }
+
+    private var agendaCollapsedTime: String {
+        if let event = model.agenda.nowEvent { return IslandViewModel.clock(event.start) }
+        if let due = model.agenda.nowReminder?.due { return IslandViewModel.clock(due) }
+        return IslandViewModel.clock(Date())
+    }
+
+    /// What is on now, then the rest of today: up to three events and four
+    /// reminders, overdue ones in red.
+    private var agendaExpandedContent: some View {
+        let agenda = model.agenda
+        let laterEvents = agenda.events.filter { $0 != agenda.nowEvent }.prefix(3)
+        let reminders = agenda.reminders.filter { $0 != agenda.nowReminder }.prefix(4)
+
+        return VStack(alignment: .leading, spacing: 8) {
+            if let event = agenda.nowEvent {
+                agendaHeader(
+                    symbol: "calendar.badge.clock",
+                    color: Self.calendarRed,
+                    title: event.title,
+                    subtitle: "Сейчас · \(IslandViewModel.clock(event.start))–\(IslandViewModel.clock(event.end))",
+                    actionSymbol: event.joinURL == nil ? nil : "video.fill",
+                    actionHelp: "Подключиться",
+                    action: { model.join(event) }
+                )
+            } else if let reminder = agenda.nowReminder {
+                agendaHeader(
+                    symbol: "checklist",
+                    color: Self.remindersBlue,
+                    title: reminder.title,
+                    subtitle: "Напоминание",
+                    actionSymbol: "checkmark",
+                    actionHelp: "Выполнено",
+                    action: { model.completeReminder(id: reminder.id) }
+                )
+            } else {
+                Text("Сегодня")
+                    .font(.system(size: settings.titleFontSize, weight: .semibold))
+                    .foregroundColor(.white)
+            }
+
+            VStack(alignment: .leading, spacing: 5) {
+                ForEach(Array(laterEvents), id: \.id) { event in
+                    HStack(spacing: 8) {
+                        Text(IslandViewModel.clock(event.start))
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(Self.calendarRed)
+                            .monospacedDigit()
+                            .frame(width: 40, alignment: .leading)
+                        Text(event.title)
+                            .font(.system(size: 12))
+                            .foregroundColor(.white.opacity(0.85))
+                            .lineLimit(1)
+                    }
+                }
+                ForEach(Array(reminders), id: \.id) { reminder in
+                    HStack(spacing: 8) {
+                        Button {
+                            model.completeReminder(id: reminder.id)
+                        } label: {
+                            Image(systemName: "circle")
+                                .font(.system(size: 13))
+                                .foregroundColor(Self.remindersBlue)
+                        }
+                        .buttonStyle(.plain)
+                        .frame(width: 40, alignment: .leading)
+                        Text(reminder.title)
+                            .font(.system(size: 12))
+                            .foregroundColor(isOverdue(reminder) ? Self.calendarRed : .white.opacity(0.85))
+                            .lineLimit(1)
+                    }
+                }
+                if laterEvents.isEmpty && reminders.isEmpty {
+                    Text("На сегодня больше ничего")
+                        .font(.system(size: 12))
+                        .foregroundColor(.white.opacity(0.5))
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        // Rows run to the left edge; keep the last one off the rounded corner.
+        .padding(.bottom, 6)
+        .expandedCard(settings: settings)
+    }
+
+    private func isOverdue(_ reminder: AgendaReminder) -> Bool {
+        guard let due = reminder.due else { return false }
+        return due < Date()
+    }
+
+    private func agendaHeader(
+        symbol: String,
+        color: Color,
+        title: String,
+        subtitle: String,
+        actionSymbol: String?,
+        actionHelp: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: symbol)
+                .font(.system(size: 20, weight: .medium))
+                .foregroundStyle(color)
+                .frame(width: 30)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .font(.system(size: settings.titleFontSize, weight: .semibold))
+                    .foregroundColor(.white)
+                    .lineLimit(1)
+                Text(subtitle)
+                    .font(.system(size: settings.artistFontSize))
+                    .foregroundColor(.white.opacity(0.6))
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+            // A round icon button, so the title keeps the row's width.
+            if let actionSymbol {
+                Button(action: action) {
+                    Image(systemName: actionSymbol)
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 32, height: 32)
+                        .background(Circle().fill(color))
+                }
+                .buttonStyle(.plain)
+                .help(actionHelp)
+            }
+        }
     }
 
     /// The system timer's own color (Clock, Control Center).
