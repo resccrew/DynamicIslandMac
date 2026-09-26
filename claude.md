@@ -352,6 +352,9 @@ fire date раз в 0.25с (не декремент — не дрейфует), 
   `IslandWindowController.refreshNotch` / `positionContainer`; `IslandView` читает кэш, `ScreenNotch.size()` в body не вызывать.
 - Смена конфигурации экранов: `didChangeScreenParametersNotification` → refreshNotch → переразмещение
   (и в `LockScreenWindowController`, если оверлей показан).
+- На экране без выреза свёрнутый/peek/wide-ears остров не выше строки меню
+  (`DisplayGeometry.collapsedIslandSize`), контент `earsRow` масштабируется `collapsedContentScale`.
+  На экране с вырезом высота 38pt сохраняется намеренно. Раскрытая карточка и glance выпадают вниз как раньше.
 - Не проверено на железе: горячее подключение/отключение монитора, закрытие крышки, переключение политики вживую.
 
 ## Зоны ответственности агентов в этом проекте

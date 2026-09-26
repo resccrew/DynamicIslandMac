@@ -15,6 +15,12 @@ enum ScreenNotch {
             statusBarThickness: NSStatusBar.system.thickness
         )
     }
+
+    /// Whether the screen has a real camera notch to hide behind.
+    static func hasNotch(for screen: NSScreen? = IslandDisplay.screen) -> Bool {
+        guard let screen else { return false }
+        return IslandDisplay.info(for: screen).hasNotch
+    }
 }
 
 /// Picks the screen the island lives on. `NSScreen.main` follows keyboard

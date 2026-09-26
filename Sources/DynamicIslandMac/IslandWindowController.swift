@@ -52,7 +52,7 @@ final class IslandWindowController: NSWindowController {
         self.model = model
         let settings = IslandSettings.shared
         let panel = IslandPanel(
-            contentRect: NSRect(origin: .zero, size: settings.containerSize(notch: model.notchSize))
+            contentRect: NSRect(origin: .zero, size: settings.containerSize(notch: model.notchSize, hasNotch: model.hasNotch))
         )
         super.init(window: panel)
 
@@ -109,7 +109,7 @@ final class IslandWindowController: NSWindowController {
         guard let panel = window else { return }
         guard let screen = IslandDisplay.screen else { return }
         refreshNotch(for: screen)
-        let size = settings.containerSize(notch: model.notchSize)
+        let size = settings.containerSize(notch: model.notchSize, hasNotch: model.hasNotch)
         let origin = DisplayGeometry.panelOrigin(containerSize: size, on: IslandDisplay.info(for: screen))
         let frame = NSRect(origin: origin, size: size)
         guard frame != panel.frame else { return }
@@ -119,7 +119,9 @@ final class IslandWindowController: NSWindowController {
     /// Updates the cached notch only when it changed, to avoid needless redraws.
     private func refreshNotch(for screen: NSScreen? = IslandDisplay.screen) {
         let notch = ScreenNotch.size(for: screen)
+        let hasNotch = ScreenNotch.hasNotch(for: screen)
         if model.notchSize != notch { model.notchSize = notch }
+        if model.hasNotch != hasNotch { model.hasNotch = hasNotch }
     }
 
     /// The island hugs the top edge and is centred horizontally. Window

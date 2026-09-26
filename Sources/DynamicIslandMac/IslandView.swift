@@ -1,4 +1,5 @@
 import SwiftUI
+import IslandGeometry
 
 struct IslandView: View {
     @ObservedObject var model: IslandViewModel
@@ -168,22 +169,32 @@ struct IslandView: View {
         let notch = model.notchSize
         let body = islandSize.width - settings.fillet * 2
         let ear = max(0, (body - notch.width) / 2)
+        let rowHeight = min(islandSize.height, notch.height)
+        // A menu-bar-high island (no hardware notch) can be shorter than the
+        // artwork; shrink the ears' content and paddings to fit, centred.
+        let scale = DisplayGeometry.collapsedContentScale(
+            rowHeight: rowHeight,
+            contentHeight: settings.collapsedArtwork
+        )
+        let padding = settings.collapsedPadding * scale
         return HStack(spacing: 0) {
             // Measured before padding and framing: the drawn content itself,
             // which can overflow its ear if it doesn't fit.
             leading()
                 .fixedSize()
+                .scaleEffect(scale, anchor: .leading)
                 .reportsContentFrame("leading")
-                .padding(.leading, settings.collapsedPadding)
+                .padding(.leading, padding)
                 .frame(width: ear, alignment: .leading)
             Color.clear.frame(width: notch.width)
             trailing()
                 .fixedSize()
+                .scaleEffect(scale, anchor: .trailing)
                 .reportsContentFrame("trailing")
-                .padding(.trailing, settings.collapsedPadding)
+                .padding(.trailing, padding)
                 .frame(width: ear, alignment: .trailing)
         }
-        .frame(height: min(islandSize.height, notch.height))
+        .frame(height: rowHeight)
         .frame(maxHeight: .infinity, alignment: .top)
     }
 
