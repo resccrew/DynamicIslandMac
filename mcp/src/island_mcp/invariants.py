@@ -147,6 +147,10 @@ def _window_geometry(s: dict[str, Any]) -> list[str]:
         out.append(f"island window has zero size: {frame}")
     if not window.get("visible"):
         out.append("island panel is not ordered on screen")
+    # Fullscreen on the island's display fades the panel out (alpha 0, stays
+    # ordered in); outside fullscreen it must be fully opaque.
+    if not window.get("isFullScreenHidden") and window.get("alpha", 1) < 0.99:
+        out.append(f"island panel faded (alpha={window.get('alpha')}) without fullscreen")
     if notch and abs(_center_x(frame) - _center_x(notch)) > TOLERANCE:
         out.append(f"island window not centred on notch: window cx={_center_x(frame):.1f}, notch cx={_center_x(notch):.1f}")
     if abs(frame["y"]) > TOLERANCE:

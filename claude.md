@@ -46,6 +46,16 @@ YouTube, SoundCloud, Twitch и т.д. в Chrome/Safari/Arc/Firefox/Яндекс,
   начавший; источник на паузе не отбирает остров у играющего (grace 3с для system-стрима).
 - Инвариант MCP (`mcp/src/island_mcp/invariants.py`) повторяет правило и читает `settings.hideWhenPaused` из `/state`.
 
+### Полноэкранный режим (`hideInFullScreen`, по умолчанию вкл.)
+Остров прячется, когда на его дисплее (`IslandDisplay.screen`) фуллскрин-приложение. Два слоя:
+1. `IslandPanel.applySpaceBehavior` — без `.fullScreenAuxiliary` окно-сервер сам не показывает панель
+   на фуллскрин-Space'ах (нативный зелёный-кнопочный фуллскрин).
+2. `IslandWindowController.updateFullScreenHiding` — проверка через `CGWindowListCopyWindowInfo`
+   (чистое правило `FullScreenDetection.isFullScreen` в `IslandGeometry`: окно слоя 0 чужого процесса
+   покрывает весь `CGDisplayBounds`) на смену Space / активацию приложения (+ повтор через 0.8с) и
+   таймер 1.5с. Скрытие — `alphaValue = 0` + `ignoresMouseEvents`, панель остаётся в порядке окон.
+Лок-скрин не трогается. В `/state`: `settings.hideInFullScreen`, `islandWindow.isFullScreenHidden`.
+
 ## Правила кодирования проекта
 - `[weak self]` в замыканиях, таймерах, NotificationCenter-подписках, где self может пережить подписку.
 - UI-мутации строго на main thread.
