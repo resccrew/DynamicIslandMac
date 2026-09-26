@@ -101,7 +101,7 @@ echo "</plist>" >> "$APP/Contents/Info.plist"
 codesign --force --deep --sign - "$APP"
 
 if [ "$INSTALL" = true ]; then
-    pkill -f "/Applications/Dynamic Island.app" 2>/dev/null || true
+    pkill -x DynamicIslandMac 2>/dev/null || true
     sleep 1
     rm -rf "/Applications/Dynamic Island.app"
     cp -R "$APP" "/Applications/Dynamic Island.app"
