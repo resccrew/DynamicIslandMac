@@ -1,5 +1,6 @@
 import SwiftUI
 import IslandGeometry
+import IslandLogic
 
 struct IslandView: View {
     @ObservedObject var model: IslandViewModel
@@ -15,7 +16,7 @@ struct IslandView: View {
                 // disappearance. Fading opacity on a slightly slower, easing
                 // curve — independent of that spring — makes it read as the
                 // island dissolving instead of the shape just shrinking.
-                .opacity(model.state == .hidden ? 0 : 1)
+                .opacity(IslandVisibility.opacity(isHidden: model.state == .hidden))
                 .animation(.easeOut(duration: 0.35), value: model.state == .hidden)
                 .onHover { hovering in
                     model.hover(hovering)
@@ -79,7 +80,12 @@ struct IslandView: View {
             } else if model.isExpanded {
                 expandedContent
                     .transition(.opacity)
-            } else if model.isIslandVisible {
+            } else if IslandVisibility.rendersCollapsedContent(
+                isIslandVisible: model.isIslandVisible,
+                showsMedia: model.showsMedia
+            ) {
+                // A paused track under the pointer keeps its row (and play
+                // button); gating on `isIslandVisible` alone emptied it.
                 collapsedContent
                     .transition(.opacity)
             }

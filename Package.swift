@@ -10,15 +10,25 @@ let package = Package(
             name: "IslandGeometry",
             path: "Sources/IslandGeometry"
         ),
+        // Pure decision rules (visibility, which media source wins).
+        .target(
+            name: "IslandLogic",
+            path: "Sources/IslandLogic"
+        ),
         .executableTarget(
             name: "DynamicIslandMac",
-            dependencies: ["IslandGeometry"],
+            dependencies: ["IslandGeometry", "IslandLogic"],
             path: "Sources/DynamicIslandMac"
         ),
         .testTarget(
             name: "IslandGeometryTests",
             dependencies: ["IslandGeometry"],
             path: "Tests/IslandGeometryTests"
+        ),
+        .testTarget(
+            name: "IslandLogicTests",
+            dependencies: ["IslandLogic"],
+            path: "Tests/IslandLogicTests"
         )
     ]
 )
