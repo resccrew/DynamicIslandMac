@@ -199,16 +199,20 @@ final class IslandSettings: ObservableObject {
     /// Tallest card the panel must hold without clipping.
     static let maxExpandedCardHeight: CGFloat = 260
 
-    func containerSize(notch: CGSize) -> CGSize {
+    func containerSize(notch: CGSize, hasNotch: Bool) -> CGSize {
         let candidates: [CGSize] = [
             expandedWindowSize,
             collapsedWindowSize,
-            islandSize(state: .peek, hasContent: true, notch: notch),
-            islandSize(state: .peek, hasContent: false, notch: notch),
+            islandSize(state: .peek, hasContent: true, notch: notch, hasNotch: hasNotch),
+            islandSize(state: .peek, hasContent: false, notch: notch, hasNotch: hasNotch),
             glanceWindowSize,
             // Timer and call widen the collapsed island; the fixed panel must
             // hold it, or the hosting view stretches the window off-centre.
-            CGSize(width: wideEarsWidth(notch: notch, peek: true), height: collapsedHeight + peekHeightGrowth),
+            DisplayGeometry.collapsedIslandSize(
+                CGSize(width: wideEarsWidth(notch: notch, peek: true), height: collapsedHeight + peekHeightGrowth),
+                notch: notch,
+                hasNotch: hasNotch
+            ),
             // Expanded cards hug their content (music ≈ 158pt, agenda up to
             // ≈ 240pt), which can outgrow `expandedHeight`. The panel is
             // click-through outside the shape, so extra height costs nothing.
@@ -243,7 +247,19 @@ final class IslandSettings: ObservableObject {
     /// Height of the glance's own row, under the notch-tall strip.
     let glanceBodyHeight: CGFloat = 46
 
-    func islandSize(state: IslandState, hasContent: Bool, notch: CGSize) -> CGSize {
+    /// Collapsed and peek sizes are capped to the menu bar on displays without
+    /// a hardware notch (see `DisplayGeometry.collapsedIslandSize`).
+    func islandSize(state: IslandState, hasContent: Bool, notch: CGSize, hasNotch: Bool) -> CGSize {
+        let size = islandSize(state: state, hasContent: hasContent, notch: notch)
+        switch state {
+        case .collapsed, .peek:
+            return DisplayGeometry.collapsedIslandSize(size, notch: notch, hasNotch: hasNotch)
+        default:
+            return size
+        }
+    }
+
+    private func islandSize(state: IslandState, hasContent: Bool, notch: CGSize) -> CGSize {
         switch state {
         case .glance:
             return glanceWindowSize

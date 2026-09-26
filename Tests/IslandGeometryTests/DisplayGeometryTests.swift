@@ -141,4 +141,43 @@ final class DisplayGeometryTests: XCTestCase {
         )
         XCTAssertEqual(DisplayGeometry.menuBarHeight(for: odd, statusBarThickness: 22), 22)
     }
+
+    // MARK: - Collapsed island fits the menu bar
+
+    func testNoNotchCollapsedCappedAtThirtyPointMenuBar() {
+        let notch = CGSize(width: 190, height: 30)
+        let collapsed = DisplayGeometry.collapsedIslandSize(CGSize(width: 306, height: 38), notch: notch, hasNotch: false)
+        XCTAssertEqual(collapsed, CGSize(width: 306, height: 30))
+        let peek = DisplayGeometry.collapsedIslandSize(CGSize(width: 324, height: 43), notch: notch, hasNotch: false)
+        XCTAssertLessThanOrEqual(peek.height, 30)
+        XCTAssertEqual(peek.width, 324)
+    }
+
+    func testNoNotchCollapsedCappedAtTwentyFourPointMenuBar() {
+        let size = DisplayGeometry.collapsedIslandSize(
+            CGSize(width: 306, height: 38), notch: CGSize(width: 190, height: 24), hasNotch: false
+        )
+        XCTAssertEqual(size, CGSize(width: 306, height: 24))
+    }
+
+    func testNotchedDisplayCollapsedUnchanged() {
+        let size = DisplayGeometry.collapsedIslandSize(
+            CGSize(width: 306, height: 38), notch: CGSize(width: 190, height: 32), hasNotch: true
+        )
+        XCTAssertEqual(size, CGSize(width: 306, height: 38))
+    }
+
+    func testShorterRequestIsNotEnlarged() {
+        let size = DisplayGeometry.collapsedIslandSize(
+            CGSize(width: 200, height: 20), notch: CGSize(width: 190, height: 30), hasNotch: false
+        )
+        XCTAssertEqual(size, CGSize(width: 200, height: 20))
+    }
+
+    func testContentScaleFitsRow() {
+        // 26pt artwork in a 24pt row with 2pt insets → 20/26.
+        XCTAssertEqual(DisplayGeometry.collapsedContentScale(rowHeight: 24, contentHeight: 26), 20.0 / 26.0, accuracy: 1e-9)
+        XCTAssertEqual(DisplayGeometry.collapsedContentScale(rowHeight: 32, contentHeight: 26), 1)
+        XCTAssertEqual(DisplayGeometry.collapsedContentScale(rowHeight: 24, contentHeight: 0), 1)
+    }
 }

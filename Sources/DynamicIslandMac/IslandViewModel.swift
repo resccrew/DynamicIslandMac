@@ -26,6 +26,9 @@ final class IslandViewModel: ObservableObject {
     /// by the window controller on placement, so the view, the hit rect and the
     /// panel frame always agree and rendering never walks `NSScreen.screens`.
     @Published var notchSize: CGSize = ScreenNotch.size()
+    /// Whether that display has a hardware notch; without one the collapsed
+    /// island is capped at the menu bar height. Refreshed together with `notchSize`.
+    @Published var hasNotch: Bool = ScreenNotch.hasNotch()
     /// Frames of the collapsed content's leading/trailing ears, in island
     /// coordinates; not published — only the debug server reads them.
     var collapsedContentFrames: [String: CGRect] = [:]
@@ -576,7 +579,7 @@ extension IslandViewModel {
     /// The island's on-screen size. Shared by the view and by the window
     /// controller's pointer hit-test, so both agree on the hugging height.
     func islandSize(settings: IslandSettings, notch: CGSize) -> CGSize {
-        let size = settings.islandSize(state: state, hasContent: isIslandVisible, notch: notch)
+        let size = settings.islandSize(state: state, hasContent: isIslandVisible, notch: notch, hasNotch: hasNotch)
         switch state {
         case .expanded:
             guard glanceTitle == nil, let height = expandedContentHeight else { return size }

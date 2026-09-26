@@ -77,6 +77,23 @@ public enum DisplayGeometry {
         return gap > 0 ? gap : statusBarThickness
     }
 
+    /// On a display without a hardware notch the collapsed and peek island
+    /// must not hang below the menu bar, so its height is capped at the
+    /// (virtual) notch height. Width is untouched. On a notched display the
+    /// taller-than-notch look is intended and the size passes through.
+    public static func collapsedIslandSize(_ requested: CGSize, notch: CGSize, hasNotch: Bool) -> CGSize {
+        guard !hasNotch else { return requested }
+        return CGSize(width: requested.width, height: min(requested.height, notch.height))
+    }
+
+    /// Scale for the collapsed row's content (artwork, equalizer, text,
+    /// paddings) so content designed `contentHeight` tall fits a row of
+    /// `rowHeight` with `inset` above and below. Never enlarges.
+    public static func collapsedContentScale(rowHeight: CGFloat, contentHeight: CGFloat, inset: CGFloat = 2) -> CGFloat {
+        guard contentHeight > 0 else { return 1 }
+        return min(1, max(0, rowHeight - inset * 2) / contentHeight)
+    }
+
     /// Index of the display to host the island, or nil when there are none.
     /// Falls back to the first display if none claims to be primary, which
     /// matches `NSScreen.screens.first` owning the menu bar.
