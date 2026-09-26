@@ -1,4 +1,5 @@
 import AppKit
+import IslandLogic
 
 /// System-wide Now Playing: whatever macOS itself shows in Control Center —
 /// Spotify and Music, but also any browser tab playing a `<video>`/`<audio>`
@@ -9,19 +10,7 @@ import AppKit
 /// still entitled) loads a small framework and streams JSON, one full state
 /// per line. The stream is event-driven; nothing is polled here.
 final class SystemNowPlaying {
-    struct Info {
-        let title: String
-        let artist: String
-        let album: String
-        let isPlaying: Bool
-        /// Elapsed time as of `timestamp`; extrapolate with the wall clock.
-        let elapsed: Double
-        let timestamp: Date
-        /// Nil for live streams (the adapter drops an infinite duration).
-        let duration: Double?
-        let bundleID: String?
-        let artworkData: Data?
-    }
+    typealias Info = NowPlayingInfo
 
     /// MRCommand ids understood by `send`.
     enum Command: Int {
@@ -137,38 +126,8 @@ final class SystemNowPlaying {
         while let end = buffer.firstIndex(of: newline) {
             let line = buffer[buffer.startIndex..<end]
             buffer.removeSubrange(buffer.startIndex...end)
-            guard let info = Self.parse(line) else { continue }
+            guard let info = NowPlayingPayload.parse(Data(line)) else { continue }
             onUpdate?(info.value)
         }
-    }
-
-    /// Wraps the parsed value so "nothing playing" (a valid, empty payload) is
-    /// distinguishable from a line that couldn't be read.
-    private struct Parsed { let value: Info? }
-
-    private static let dateFormatter: ISO8601DateFormatter = ISO8601DateFormatter()
-
-    private static func parse(_ line: Data) -> Parsed? {
-        guard
-            let object = try? JSONSerialization.jsonObject(with: line) as? [String: Any],
-            object["type"] as? String == "data"
-        else { return nil }
-        guard let payload = object["payload"] as? [String: Any], !payload.isEmpty else {
-            return Parsed(value: nil)
-        }
-
-        let timestamp = (payload["timestamp"] as? String).flatMap(dateFormatter.date(from:)) ?? Date()
-        let duration = (payload["duration"] as? Double).flatMap { $0.isFinite && $0 > 0 ? $0 : nil }
-        return Parsed(value: Info(
-            title: payload["title"] as? String ?? "",
-            artist: payload["artist"] as? String ?? "",
-            album: payload["album"] as? String ?? "",
-            isPlaying: payload["playing"] as? Bool ?? false,
-            elapsed: payload["elapsedTime"] as? Double ?? 0,
-            timestamp: timestamp,
-            duration: duration,
-            bundleID: payload["bundleIdentifier"] as? String,
-            artworkData: (payload["artworkData"] as? String).flatMap { Data(base64Encoded: $0) }
-        ))
     }
 }

@@ -13,6 +13,19 @@ struct NowPlayingSnapshot {
     let playerBundleID: String?
 }
 
+/// A transport command from the island's buttons.
+enum NowPlayingCommand: String {
+    case togglePlayPause, next, previous
+}
+
+extension NowPlayingSnapshot {
+    /// Nothing loaded anywhere.
+    static let empty = NowPlayingSnapshot(
+        title: "", artist: "", artwork: nil, accent: nil,
+        isPlaying: false, position: 0, duration: 0, playerBundleID: nil
+    )
+}
+
 /// Where Now Playing currently comes from, surfaced for debugging.
 enum NowPlayingSourceKind: String {
     /// System-wide Now Playing: any app, any browser tab.
@@ -49,6 +62,27 @@ final class NowPlayingPoller {
     private var cachedArtworkKey: String?
     private var cachedArtwork: NSImage?
     private var cachedAccent: NSColor?
+    /// AppleScript artwork URL being downloaded. Touched only on `queue`.
+    private var artworkDownload: String?
+
+    /// App display names by bundle id: a LaunchServices lookup per tick
+    /// adds up. Touched only on `queue`.
+    private var appNames: [String: String] = [:]
+
+    /// What was last handed to main, to skip re-sending an unchanged idle
+    /// state every second. Touched only on `queue`.
+    private var lastDelivered: DeliveredKey?
+
+    private static let artworkSession: URLSession = {
+        let config = URLSessionConfiguration.ephemeral
+        config.timeoutIntervalForRequest = 5
+        config.timeoutIntervalForResource = 10
+        return URLSession(configuration: config)
+    }()
+
+    /// Debug hook: when set and it returns true, a transport command was
+    /// handled (e.g. by an injected fake track) and must not reach a player.
+    var commandInterceptor: ((NowPlayingCommand) -> Bool)?
 
     func start(onUpdate: @escaping (NowPlayingSnapshot) -> Void) {
         self.onUpdate = onUpdate
@@ -71,19 +105,28 @@ final class NowPlayingPoller {
         tick()
     }
 
+    /// Forces the next state out even if unchanged, e.g. after a debug
+    /// injection overwrote what the model shows.
+    func resync() {
+        queue.async { [weak self] in self?.lastDelivered = nil }
+    }
+
     // MARK: - Commands
 
     func togglePlayPause() {
+        if commandInterceptor?(.togglePlayPause) == true { return }
         guard source == .system, let system else { return AppleScriptNowPlaying.playPause() }
         system.send(.togglePlayPause)
     }
 
     func next() {
+        if commandInterceptor?(.next) == true { return }
         guard source == .system, let system else { return AppleScriptNowPlaying.next() }
         system.send(.nextTrack)
     }
 
     func previous() {
+        if commandInterceptor?(.previous) == true { return }
         guard source == .system, let system else { return AppleScriptNowPlaying.previous() }
         system.send(.previousTrack)
     }
@@ -101,6 +144,7 @@ final class NowPlayingPoller {
         case .appleScript:
             // The AppleScript itself runs on its own serial queue; the artwork
             // download and colour extraction continue here off the main thread.
+            // Skipped while the previous fetch still waits on a player.
             AppleScriptNowPlaying.fetch { [weak self] info in
                 self?.queue.async {
                     self?.handle(info)
@@ -133,11 +177,12 @@ final class NowPlayingPoller {
     }
 
     private func emitSystem() {
-        guard let info = systemInfo else {
-            deliver(NowPlayingSnapshot(
-                title: "", artist: "", artwork: nil, accent: nil,
-                isPlaying: false, position: 0, duration: 0, playerBundleID: nil
-            ))
+        // An app that is still registered but no longer has anything loaded
+        // (its tab was closed) reports a bare, paused, untitled entry. That is
+        // a source that went away, not a paused track; since a paused track
+        // keeps the island up, it must clear instead.
+        guard let info = systemInfo, !info.isSourceGone else {
+            deliver(.empty)
             return
         }
 
@@ -155,33 +200,17 @@ final class NowPlayingPoller {
             accent = cachedAccent
         }
 
-        // An app that is still registered but no longer has anything loaded
-        // (its tab was closed) can report a bare, paused, untitled entry.
-        // That is a source that went away, not a paused track; since a paused
-        // track now keeps the island up, it must clear instead.
-        if !info.isPlaying && info.title.isEmpty && info.artist.isEmpty && info.album.isEmpty {
-            deliver(NowPlayingSnapshot(
-                title: "", artist: "", artwork: nil, accent: nil,
-                isPlaying: false, position: 0, duration: 0, playerBundleID: nil
-            ))
-            return
-        }
-
         let duration = info.duration ?? 0
         var position = info.elapsed
         if info.isPlaying {
             position += Date().timeIntervalSince(info.timestamp)
         }
 
-        // A bare <video>/<audio> page has no artist: name the browser (or the
-        // app) instead, and if it has no title either, use that as the title.
         let owner = info.bundleID.map(AppIdentity.owner(of:))
-        let appName = Self.appName(owner)
-        let subtitle = [info.artist, info.album, appName].first { !$0.isEmpty } ?? ""
-        let title = info.title.isEmpty ? appName : info.title
+        let labels = NowPlayingPayload.labels(for: info, appName: appName(owner))
         deliver(NowPlayingSnapshot(
-            title: title,
-            artist: subtitle == title ? "" : subtitle,
+            title: labels.title,
+            artist: labels.artist,
             artwork: artwork,
             accent: accent,
             isPlaying: info.isPlaying,
@@ -191,13 +220,14 @@ final class NowPlayingPoller {
         ))
     }
 
-    private static func appName(_ bundleID: String?) -> String {
-        guard
-            let bundleID,
-            let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID)
-        else { return "" }
-        return FileManager.default.displayName(atPath: url.path)
-            .replacingOccurrences(of: ".app", with: "")
+    private func appName(_ bundleID: String?) -> String {
+        guard let bundleID else { return "" }
+        if let cached = appNames[bundleID] { return cached }
+        let name = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID)
+            .map { FileManager.default.displayName(atPath: $0.path).replacingOccurrences(of: ".app", with: "") }
+            ?? ""
+        appNames[bundleID] = name
+        return name
     }
 
     private func handle(_ info: AppleScriptNowPlaying.Info?) {
@@ -207,12 +237,9 @@ final class NowPlayingPoller {
             if urlString == cachedArtworkKey {
                 artwork = cachedArtwork
                 accent = cachedAccent
-            } else if let url = URL(string: urlString), let data = try? Data(contentsOf: url) {
-                artwork = NSImage(data: data)
-                accent = artwork.map(ArtworkAccent.color(from:))
-                cachedArtworkKey = urlString
-                cachedArtwork = artwork
-                cachedAccent = accent
+            } else {
+                // Downloaded off this queue; the next tick picks it up.
+                downloadArtwork(urlString)
             }
         }
 
@@ -228,7 +255,54 @@ final class NowPlayingPoller {
         ))
     }
 
+    /// Fetches an AppleScript cover without blocking `queue`; one at a time.
+    private func downloadArtwork(_ urlString: String) {
+        guard artworkDownload != urlString, let url = URL(string: urlString),
+              url.scheme == "https" || url.scheme == "http"
+        else { return }
+        artworkDownload = urlString
+        Self.artworkSession.dataTask(with: url) { [weak self] data, _, _ in
+            let image = data.flatMap(NSImage.init(data:))
+            let accent = image.map(ArtworkAccent.color(from:))
+            self?.queue.async {
+                guard let self, self.artworkDownload == urlString else { return }
+                self.artworkDownload = nil
+                guard let image else { return }
+                self.cachedArtworkKey = urlString
+                self.cachedArtwork = image
+                self.cachedAccent = accent
+            }
+        }.resume()
+    }
+
+    /// Everything the model shows except the moving position. A paused or
+    /// empty state that matches the last one sent is not sent again, so an
+    /// idle Mac isn't woken every second for nothing.
+    private struct DeliveredKey: Equatable {
+        let title: String
+        let artist: String
+        let artwork: ObjectIdentifier?
+        let isPlaying: Bool
+        let position: Double
+        let duration: Double
+        let playerBundleID: String?
+
+        init(_ snapshot: NowPlayingSnapshot) {
+            title = snapshot.title
+            artist = snapshot.artist
+            artwork = snapshot.artwork.map(ObjectIdentifier.init)
+            isPlaying = snapshot.isPlaying
+            // A paused position that jumps (a seek) is still news.
+            position = snapshot.isPlaying ? 0 : snapshot.position.rounded()
+            duration = snapshot.duration
+            playerBundleID = snapshot.playerBundleID
+        }
+    }
+
     private func deliver(_ snapshot: NowPlayingSnapshot) {
+        let key = DeliveredKey(snapshot)
+        if !snapshot.isPlaying, key == lastDelivered { return }
+        lastDelivered = key
         DispatchQueue.main.async { [weak self] in
             self?.onUpdate?(snapshot)
         }

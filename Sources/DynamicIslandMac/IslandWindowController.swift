@@ -117,7 +117,9 @@ final class IslandWindowController: NSWindowController {
     /// Space switches and app activations are when fullscreen starts or ends;
     /// the entering animation finishes after the notification, so re-check a
     /// moment later too. A slow timer catches anything else (a player going
-    /// borderless-fullscreen within the same Space).
+    /// borderless-fullscreen within the same Space), but only while the island
+    /// is on screen: scanning every window each 1.5s for a hidden island is
+    /// wasted energy, and becoming visible re-checks straight away.
     private func observeFullScreen() {
         let center = NSWorkspace.shared.notificationCenter
         for name in [NSWorkspace.activeSpaceDidChangeNotification, NSWorkspace.didActivateApplicationNotification] {
@@ -131,10 +133,27 @@ final class IslandWindowController: NSWindowController {
                 }
                 .store(in: &cancellables)
         }
-        fullScreenTimer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { [weak self] _ in
+        model.$state
+            .map { $0 != .hidden }
+            .removeDuplicates()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] visible in self?.setFullScreenPolling(visible) }
+            .store(in: &cancellables)
+        updateFullScreenHiding()
+    }
+
+    private func setFullScreenPolling(_ on: Bool) {
+        fullScreenTimer?.invalidate()
+        fullScreenTimer = nil
+        guard on else { return }
+        updateFullScreenHiding()
+        let timer = Timer(timeInterval: 1.5, repeats: true) { [weak self] _ in
             self?.updateFullScreenHiding()
         }
-        updateFullScreenHiding()
+        // Energy: let the system coalesce the wake-ups.
+        timer.tolerance = 0.5
+        RunLoop.main.add(timer, forMode: .common)
+        fullScreenTimer = timer
     }
 
     private func updateFullScreenHiding() {
