@@ -144,6 +144,12 @@ struct SettingsView: View {
                 hint("Выключено — остров на паузе остаётся, пока открыт источник (вкладка или приложение).")
             }
 
+            section("Внешний API") {
+                Toggle("Разрешить внешний API (Live Activity)", isOn: $settings.allowExternalAPI)
+                    .font(.system(size: 12))
+                hint("Скрипты и CI показывают прогресс в острове через tools/island. Только 127.0.0.1:47810, по токену.")
+            }
+
             section("Экран острова") {
                 Picker("Экран острова", selection: $settings.displayPolicy) {
                     Text("Основной (экран со строкой меню)").tag(IslandDisplayPolicy.primary)

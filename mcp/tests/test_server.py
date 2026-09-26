@@ -417,3 +417,38 @@ def test_faded_panel_without_fullscreen_is_violation():
     s = playing_state()
     s["islandWindow"] = dict(s["islandWindow"], alpha=0, isFullScreenHidden=False)
     assert any("without fullscreen" in v for v in invariants.check(s))
+
+
+def activity_state(**extra):
+    s = copy.deepcopy(BASE_STATE)
+    s.update(state="collapsed", isIslandVisible=True, content="activity",
+             liveActivity={"id": "build", "state": "running"})
+    s["islandShapeRect"] = playing_state()["islandShapeRect"]
+    s.update(extra)
+    return s
+
+
+def test_live_activity_counts_as_visible_and_wins_over_timer_and_media():
+    assert invariants.check(activity_state()) == []
+    assert invariants.check(activity_state(timerRemaining=None)) == []
+    s = activity_state(title="Song", isPlaying=True, hasContent=True)
+    assert invariants.check(s) == []
+
+
+def test_live_activity_must_make_island_visible():
+    out = invariants.check(activity_state(isIslandVisible=False, state="hidden"))
+    assert any("activity=True" in v for v in out)
+
+
+def test_live_activity_ranks_below_call_and_agenda():
+    s = activity_state(call={"app": "Telegram"})
+    assert any("says call" in v for v in invariants.check(s))
+    s = activity_state()
+    s["agenda"] = {"events": [], "reminders": [], "nowEvent": None, "nowReminder": None, "pinned": True}
+    s["state"] = "expanded"
+    assert any("says agenda" in v for v in invariants.check(s))
+
+
+def test_media_while_activity_is_a_violation():
+    s = activity_state(content="media", title="Song", isPlaying=True, hasContent=True)
+    assert any("between agenda and timer) says activity" in v for v in invariants.check(s))

@@ -14,6 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lockScreenController: LockScreenWindowController?
     private var settingsController: SettingsWindowController?
     private var statusItem: NSStatusItem?
+    private var liveActivityServer: LiveActivityServer?
     private var cancellables = Set<AnyCancellable>()
     #if DEBUG
     private var debugServer: DebugControlServer?
@@ -78,6 +79,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             onSnapshot: { [weak self] snapshot in self?.model.applyAgenda(snapshot) },
             onAlert: { [weak self] alert in self?.model.handleAgendaAlert(alert) }
         )
+
+        let liveActivityServer = LiveActivityServer(model: model)
+        self.liveActivityServer = liveActivityServer
+        liveActivityServer.setEnabled(settings.allowExternalAPI)
+        settings.$allowExternalAPI
+            .removeDuplicates()
+            .sink { [weak liveActivityServer] in liveActivityServer?.setEnabled($0) }
+            .store(in: &cancellables)
 
         syncStatusItem()
         settings.objectWillChange
