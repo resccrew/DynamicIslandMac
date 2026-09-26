@@ -51,8 +51,9 @@ def _content(s: dict[str, Any]) -> list[str]:
     elif s.get("isPlaying") and s.get("title"):
         expected = "media"
     else:
-        # A paused track may still fill a click-opened card.
-        expected = "media" if s.get("state") == "expanded" and s.get("hasContent") else "none"
+        # A paused track still fills an open island: a click-opened card
+        # (expanded) or a hovered one (peek). Closed, it shows nothing.
+        expected = "media" if s.get("state") in ("expanded", "peek") and s.get("hasContent") else "none"
     if content != expected:
         return [f"content={content} but priority glance>call>agenda>timer>media says {expected}"]
     return []

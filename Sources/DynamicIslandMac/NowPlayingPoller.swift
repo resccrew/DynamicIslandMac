@@ -1,4 +1,5 @@
 import AppKit
+import IslandLogic
 
 struct NowPlayingSnapshot {
     let title: String
@@ -38,6 +39,12 @@ final class NowPlayingPoller {
     /// Latest system state; the 1s tick re-emits it so playback time keeps
     /// moving between events. Touched only on `queue`.
     private var systemInfo: SystemNowPlaying.Info?
+    /// Latest report per source app, and which one owns the island. The
+    /// stream carries whatever macOS calls "now playing"; the arbiter stops a
+    /// paused app that reports in from stealing the island from one that is
+    /// still playing (see `NowPlayingArbiter`). Touched only on `queue`.
+    private var systemInfos: [String: SystemNowPlaying.Info] = [:]
+    private var arbiter = NowPlayingArbiter()
 
     private var cachedArtworkKey: String?
     private var cachedArtwork: NSImage?
@@ -52,7 +59,7 @@ final class NowPlayingPoller {
             system.onFailure = { [weak self] in self?.fallBackToAppleScript() }
             system.start { [weak self] info in
                 self?.queue.async {
-                    self?.systemInfo = info
+                    self?.receiveSystem(info)
                     self?.emitSystem()
                 }
             }
@@ -86,7 +93,11 @@ final class NowPlayingPoller {
     private func tick() {
         switch source {
         case .system:
-            queue.async { [weak self] in self?.emitSystem() }
+            queue.async { [weak self] in
+                // A playing source that went quiet loses its grace period here.
+                self?.pickSystemWinner()
+                self?.emitSystem()
+            }
         case .appleScript:
             // The AppleScript itself runs on its own serial queue; the artwork
             // download and colour extraction continue here off the main thread.
@@ -101,6 +112,24 @@ final class NowPlayingPoller {
     private func fallBackToAppleScript() {
         system = nil
         source = .appleScript
+    }
+
+    private func receiveSystem(_ info: SystemNowPlaying.Info?) {
+        guard let info else {
+            systemInfos.removeAll()
+            arbiter.reset()
+            systemInfo = nil
+            return
+        }
+        let id = info.bundleID.map(AppIdentity.owner(of:)) ?? ""
+        systemInfos[id] = info
+        arbiter.report(id: id, isPlaying: info.isPlaying, at: Date())
+        pickSystemWinner()
+    }
+
+    private func pickSystemWinner() {
+        guard let id = arbiter.winner(at: Date()) else { return }
+        systemInfo = systemInfos[id]
     }
 
     private func emitSystem() {

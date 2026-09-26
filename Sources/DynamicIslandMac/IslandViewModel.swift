@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import Combine
+import IslandLogic
 
 /// Resting sizes: fully out of sight when there is nothing to show, idle, a
 /// slight grow under the pointer, and fully open.
@@ -61,7 +62,7 @@ final class IslandViewModel: ObservableObject {
         if call != nil { return .call }
         if isAgendaNow || isAgendaPinned { return .agenda }
         if isTimerActive { return .timer }
-        if isPlaying && !title.isEmpty || isPinnedOpen && hasContent { return .media }
+        if showsMedia { return .media }
         return .none
     }
 
@@ -344,6 +345,14 @@ final class IslandViewModel: ObservableObject {
         (isPlaying && !title.isEmpty) || isTimerActive || call != nil || isAgendaNow || isAgendaPinned
     }
 
+    /// The track fills the island: while playing, and — paused — while the
+    /// island is held open by hover or a click, so a pause never collapses it
+    /// under the pointer. `isIslandVisible` stays play-gated, so once the
+    /// pointer leaves a paused island hides (the Spotify "stuck" bug above).
+    var showsMedia: Bool {
+        IslandVisibility.showsMedia(isPlaying: isPlaying, hasTrack: hasContent, isOpen: isHovering || isPinnedOpen)
+    }
+
     /// Changes exactly once per track, driving the artwork flip.
     var trackKey: String { "\(title)|\(artist)" }
 
@@ -371,7 +380,7 @@ final class IslandViewModel: ObservableObject {
     /// here — the only tap belongs to entering the island.
     func tap() {
         // An open card stays tappable after a pause, so it can still be closed.
-        guard isIslandVisible || isPinnedOpen else { return }
+        guard isIslandVisible || isPinnedOpen || showsMedia else { return }
         // The menu-opened agenda card closes on a click like any open card.
         if isAgendaPinned {
             isAgendaPinned = false
@@ -421,7 +430,10 @@ final class IslandViewModel: ObservableObject {
     }
 
     func apply(_ snapshot: NowPlayingSnapshot) {
+        // Another app taking over counts as a new track even with the same
+        // title, so its cover, tint and lyrics never carry over.
         let trackChanged = snapshot.title != title || snapshot.artist != artist
+            || snapshot.playerBundleID != playerBundleID
 
         title = snapshot.title
         artist = snapshot.artist
@@ -547,7 +559,7 @@ final class IslandViewModel: ObservableObject {
             next = .glance
         } else if isAgendaPinned {
             next = .expanded
-        } else if isPinnedOpen && (isIslandVisible || hasContent) {
+        } else if isPinnedOpen && (isIslandVisible || showsMedia) {
             // Pausing from the card's own button must not pull the card, and
             // the play button with it, out from under the pointer. It closes
             // on pointer exit like any click-opened island.
@@ -579,7 +591,7 @@ extension IslandViewModel {
     /// The island's on-screen size. Shared by the view and by the window
     /// controller's pointer hit-test, so both agree on the hugging height.
     func islandSize(settings: IslandSettings, notch: CGSize) -> CGSize {
-        let size = settings.islandSize(state: state, hasContent: isIslandVisible, notch: notch, hasNotch: hasNotch)
+        let size = settings.islandSize(state: state, hasContent: isIslandVisible || showsMedia, notch: notch, hasNotch: hasNotch)
         switch state {
         case .expanded:
             guard glanceTitle == nil, let height = expandedContentHeight else { return size }
