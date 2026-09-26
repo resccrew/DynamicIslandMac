@@ -240,6 +240,10 @@ final class IslandSettings: ObservableObject {
     /// over the shape it grows out of.
     /// The glance grows below the notch: its text is wider than the wings
     /// beside the camera, so a single row at notch height would sit behind it.
+    /// Top inset of a glance on a screen without a notch: the virtual
+    /// notch is already only as tall as the menu bar, so a small gap suffices.
+    static let glanceTopInsetWithoutNotch: CGFloat = 4
+
     var glanceWindowSize: CGSize {
         CGSize(
             width: max(collapsedWidth, 280) + fillet * 2,
@@ -266,6 +270,9 @@ final class IslandSettings: ObservableObject {
         switch state {
         case .collapsed, .peek:
             return DisplayGeometry.collapsedIslandSize(size, notch: notch, hasNotch: hasNotch)
+        case .glance where !hasNotch:
+            // No camera to clear: one row of text, not 38pt of black above it.
+            return CGSize(width: size.width, height: Self.glanceTopInsetWithoutNotch + glanceBodyHeight)
         default:
             return size
         }

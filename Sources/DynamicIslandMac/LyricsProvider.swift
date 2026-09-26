@@ -1,9 +1,5 @@
 import Foundation
-
-struct LyricLine: Equatable {
-    let time: Double
-    let text: String
-}
+import IslandLogic
 
 /// Fetches time-synced lyrics from LRCLIB.
 ///
@@ -91,13 +87,11 @@ enum LyricsProvider {
 
             // Closest duration wins: different releases of the same song carry
             // different timings, and a mismatched one drifts out of sync.
-            let best = results
-                .filter { ($0["syncedLyrics"] as? String)?.isEmpty == false }
-                .min { left, right in
-                    let l = abs((left["duration"] as? Double ?? 0) - duration)
-                    let r = abs((right["duration"] as? Double ?? 0) - duration)
-                    return l < r
-                }
+            let candidates = results.filter { ($0["syncedLyrics"] as? String)?.isEmpty == false }
+            let best = LyricsParser.closestDurationIndex(
+                candidates.map { $0["duration"] as? Double },
+                to: duration
+            ).map { candidates[$0] }
 
             guard let synced = best?["syncedLyrics"] as? String else {
                 completion([])
@@ -131,36 +125,7 @@ enum LyricsProvider {
         }.resume()
     }
 
-    /// Parses `[mm:ss.cc] text` lines. A stamp may repeat on one line, and lines
-    /// with no text mark instrumental gaps, which are kept so the highlight can
-    /// rest on them instead of hanging on the previous lyric.
     static func parse(_ lrc: String) -> [LyricLine] {
-        var result: [LyricLine] = []
-
-        for raw in lrc.split(separator: "\n", omittingEmptySubsequences: false) {
-            let line = String(raw)
-            var stamps: [Double] = []
-            var rest = Substring(line)
-
-            while rest.hasPrefix("["),
-                  let close = rest.firstIndex(of: "]") {
-                let body = rest[rest.index(after: rest.startIndex)..<close]
-                let parts = body.split(separator: ":")
-                if parts.count == 2,
-                   let minutes = Double(parts[0]),
-                   let seconds = Double(parts[1]) {
-                    stamps.append(minutes * 60 + seconds)
-                }
-                rest = rest[rest.index(after: close)...]
-            }
-
-            guard !stamps.isEmpty else { continue }
-            let text = rest.trimmingCharacters(in: .whitespaces)
-            for stamp in stamps {
-                result.append(LyricLine(time: stamp, text: text))
-            }
-        }
-
-        return result.sorted { $0.time < $1.time }
+        LyricsParser.parse(lrc)
     }
 }
