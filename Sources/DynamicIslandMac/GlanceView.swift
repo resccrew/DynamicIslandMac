@@ -27,13 +27,13 @@ struct GlanceView: View {
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(title)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.dsEar)
                     .foregroundStyle(.white)
                     .lineLimit(1)
                 if let subtitle {
                     Text(subtitle)
                         .font(.system(size: 11, weight: .regular))
-                        .foregroundStyle(.white.opacity(0.55))
+                        .foregroundStyle(.white.opacity(.dsSecondary))
                         .lineLimit(1)
                 }
             }
@@ -45,7 +45,7 @@ struct GlanceView: View {
             if let actionLabel {
                 Button(action: onAction) {
                     Text(actionLabel)
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.dsLabel)
                         .foregroundStyle(.white)
                         .lineLimit(1)
                         .fixedSize()

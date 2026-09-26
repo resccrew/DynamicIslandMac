@@ -226,14 +226,14 @@ struct IslandView: View {
             HStack(spacing: 6) {
                 appIcon(call.bundleID, size: settings.collapsedArtwork - 4)
                 Image(systemName: "phone.fill")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.dsCaption)
                     .foregroundStyle(Self.callGreen)
             }
         } trailing: {
             HStack(spacing: 5) {
                 if call.cameraOn {
                     Image(systemName: "video.fill")
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(.dsCaption)
                         .foregroundStyle(Self.callGreen)
                 }
                 callDuration(call, size: 13)
@@ -248,7 +248,7 @@ struct IslandView: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Звонок · \(call.appName)")
-                        .font(.system(size: settings.titleFontSize, weight: .semibold))
+                        .font(.dsCardTitle)
                         .foregroundColor(.white)
                         .lineLimit(1)
                     callDuration(call, size: settings.artistFontSize)
@@ -265,7 +265,7 @@ struct IslandView: View {
                     model.openCallApp()
                 } label: {
                     Text("Открыть")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.dsLabel)
                         .foregroundStyle(.white)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 6)
@@ -289,10 +289,10 @@ struct IslandView: View {
 
     private func callIndicator(symbol: String, active: Bool) -> some View {
         Image(systemName: symbol)
-            .font(.system(size: 12, weight: .semibold))
-            .foregroundStyle(active ? Self.callGreen : .white.opacity(0.4))
+            .font(.dsLabel)
+            .foregroundStyle(active ? Self.callGreen : .white.opacity(.dsTertiary))
             .frame(width: 28, height: 28)
-            .background(Circle().fill(Color.white.opacity(0.1)))
+            .background(Circle().fill(Color.white.opacity(0.12)))
     }
 
     private func appIcon(_ bundleID: String, size: CGFloat) -> some View {
@@ -313,11 +313,11 @@ struct IslandView: View {
     private var timerCollapsedContent: some View {
         earsRow {
             Image(systemName: model.isTimerPaused ? "pause.fill" : "timer")
-                .font(.system(size: 14, weight: .semibold))
+                .font(.dsEar)
                 .foregroundStyle(Self.timerOrange)
         } trailing: {
             Text(formatCountdown(model.timerRemaining ?? 0))
-                .font(.system(size: 13, weight: .semibold))
+                .font(.dsEar)
                 .foregroundColor(model.isTimerPaused ? .white.opacity(DS.Opacity.secondary) : Self.timerOrange)
                 .monospacedDigit()
                 .lineLimit(1)
@@ -330,18 +330,18 @@ struct IslandView: View {
                 Text(model.timerTitle.isEmpty
                      ? (model.isTimerPaused ? "Таймер на паузе" : "Таймер")
                      : model.timerTitle)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.55))
+                    .font(.dsLabel)
+                    .foregroundStyle(.white.opacity(.dsSecondary))
                     .lineLimit(1)
                 Text(formatCountdown(model.timerRemaining ?? 0))
-                    .font(.system(size: 34, weight: .semibold))
+                    .font(.dsDisplay)
                     .foregroundColor(model.isTimerPaused ? .white.opacity(DS.Opacity.secondary) : Self.timerOrange)
                     .monospacedDigit()
             }
 
             GeometryReader { proxy in
                 ZStack(alignment: .leading) {
-                    Capsule().fill(Color.white.opacity(0.22))
+                    Capsule().fill(Color.white.opacity(.dsTrack))
                     Capsule()
                         .fill(Self.timerOrange.opacity(model.isTimerPaused ? 0.45 : 0.9))
                         .frame(width: proxy.size.width * timerFraction)
@@ -355,8 +355,8 @@ struct IslandView: View {
                 model.openClock()
             } label: {
                 Text("Открыть Часы")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.75))
+                    .font(.dsLabel)
+                    .foregroundStyle(.white.opacity(.dsSecondary))
                     .padding(.horizontal, 14)
                     .padding(.vertical, 6)
                     .background(Capsule().fill(Color.white.opacity(0.12)))
@@ -383,11 +383,11 @@ struct IslandView: View {
     private var agendaCollapsedContent: some View {
         earsRow {
             Image(systemName: model.agenda.nowEvent != nil ? "calendar" : "checklist")
-                .font(.system(size: 14, weight: .semibold))
+                .font(.dsEar)
                 .foregroundStyle(model.agenda.nowEvent != nil ? Self.calendarRed : Self.remindersBlue)
         } trailing: {
             Text(agendaCollapsedTime)
-                .font(.system(size: 13, weight: .semibold))
+                .font(.dsEar)
                 .foregroundColor(.white)
                 .monospacedDigit()
                 .lineLimit(1)
@@ -438,7 +438,7 @@ struct IslandView: View {
                 )
             } else {
                 Text("Сегодня")
-                    .font(.system(size: settings.titleFontSize, weight: .semibold))
+                    .font(.dsCardTitle)
                     .foregroundColor(.white)
             }
 
@@ -446,12 +446,12 @@ struct IslandView: View {
                 ForEach(Array(laterEvents), id: \.id) { event in
                     HStack(spacing: 8) {
                         Text(IslandViewModel.clock(event.start))
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundColor(.white.opacity(0.6))
+                            .font(.dsLabel)
+                            .foregroundColor(.white.opacity(.dsSecondary))
                             .monospacedDigit()
                             .frame(width: 40, alignment: .leading)
                         Text(event.title)
-                            .font(.system(size: 12))
+                            .font(.dsBody)
                             .foregroundColor(.white.opacity(DS.Opacity.secondary))
                             .lineLimit(1)
                     }
@@ -462,20 +462,20 @@ struct IslandView: View {
                             model.completeReminder(id: reminder.id)
                         } label: {
                             Image(systemName: "circle")
-                                .font(.system(size: 13))
+                                .font(.dsEar)
                                 .foregroundColor(Self.remindersBlue)
                         }
                         .buttonStyle(.plain)
                         .frame(width: 40, alignment: .leading)
                         Text(reminder.title)
-                            .font(.system(size: 12))
+                            .font(.dsBody)
                             .foregroundColor(isOverdue(reminder) ? Self.calendarRed : .white.opacity(DS.Opacity.secondary))
                             .lineLimit(1)
                     }
                 }
                 if laterEvents.isEmpty && reminders.isEmpty {
                     Text("На сегодня больше ничего")
-                        .font(.system(size: 12))
+                        .font(.dsBody)
                         .foregroundColor(.white.opacity(DS.Opacity.secondary))
                 }
             }
@@ -507,12 +507,12 @@ struct IslandView: View {
                 .frame(width: 30)
             VStack(alignment: .leading, spacing: 1) {
                 Text(title)
-                    .font(.system(size: settings.titleFontSize, weight: .semibold))
+                    .font(.dsCardTitle)
                     .foregroundColor(.white)
                     .lineLimit(1)
                 Text(subtitle)
-                    .font(.system(size: settings.artistFontSize))
-                    .foregroundColor(.white.opacity(0.6))
+                    .font(.dsBody)
+                    .foregroundColor(.white.opacity(.dsSecondary))
                     .lineLimit(1)
             }
             Spacer(minLength: 0)
@@ -520,7 +520,7 @@ struct IslandView: View {
             if let actionSymbol {
                 Button(action: action) {
                     Image(systemName: actionSymbol)
-                        .font(.system(size: 13, weight: .bold))
+                        .font(.dsEar)
                         .foregroundStyle(.white)
                         .frame(width: 32, height: 32)
                         .background(Circle().fill(color))
@@ -549,12 +549,12 @@ struct IslandView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     VStack(alignment: .leading, spacing: 1) {
                         Text(model.title.isEmpty ? "Nothing playing" : model.title)
-                            .font(.system(size: settings.titleFontSize, weight: .semibold))
+                            .font(.dsCardTitle)
                             .foregroundColor(.white)
                             .lineLimit(1)
                         Text(model.artist)
-                            .font(.system(size: settings.artistFontSize, weight: .regular))
-                            .foregroundColor(.white.opacity(0.65))
+                            .font(.dsBody)
+                            .foregroundColor(.white.opacity(.dsSecondary))
                             .lineLimit(1)
                     }
 
@@ -573,15 +573,15 @@ struct IslandView: View {
     private var progressRow: some View {
         HStack(spacing: 8) {
             Text(FormatTime.playback(position: model.position, duration: model.duration).elapsed)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundColor(.white.opacity(0.45))
+                .font(.dsCaption)
+                .foregroundColor(.white.opacity(.dsTertiary))
                 .monospacedDigit()
 
             GeometryReader { proxy in
                 ZStack(alignment: .leading) {
-                    Capsule().fill(Color.white.opacity(0.22))
+                    Capsule().fill(Color.white.opacity(.dsTrack))
                     Capsule()
-                        .fill(Color.white.opacity(0.75))
+                        .fill(Color.white.opacity(.dsSecondary))
                         .frame(width: proxy.size.width * progressFraction)
                 }
             }
@@ -589,14 +589,14 @@ struct IslandView: View {
 
             if model.duration > 0 {
                 Text("-\(FormatTime.playback(position: model.position, duration: model.duration).remaining)")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundColor(.white.opacity(0.45))
+                    .font(.dsCaption)
+                    .foregroundColor(.white.opacity(.dsTertiary))
                     .monospacedDigit()
             } else {
                 // Live streams (YouTube/Twitch live) have no length.
                 Text("LIVE")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundColor(.red.opacity(DS.Opacity.secondary))
+                    .font(.dsCaption)
+                    .foregroundColor(Accent.calendarRed.opacity(DS.Opacity.secondary))
             }
         }
     }
@@ -616,8 +616,8 @@ struct IslandView: View {
                 AudioOutputs.showPicker()
             } label: {
                 Image(systemName: "speaker.wave.2.circle")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.65))
+                    .font(.dsEar)
+                    .foregroundStyle(.white.opacity(.dsSecondary))
             }
             .buttonStyle(.plain)
 
@@ -625,8 +625,8 @@ struct IslandView: View {
                 model.skipPrevious()
             } label: {
                 Image(systemName: "backward.end")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.65))
+                    .font(.dsEar)
+                    .foregroundStyle(.white.opacity(.dsSecondary))
             }
             .buttonStyle(.plain)
 
@@ -634,7 +634,7 @@ struct IslandView: View {
                 model.togglePlayPause()
             } label: {
                 Image(systemName: model.isPlaying ? "pause.fill" : "play.fill")
-                    .font(.system(size: 13, weight: .bold))
+                    .font(.dsEar)
                     .foregroundStyle(.black)
                     .frame(width: 32, height: 32)
                     .background(Circle().fill(.white))
@@ -645,8 +645,8 @@ struct IslandView: View {
                 model.skipNext()
             } label: {
                 Image(systemName: "forward.end")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.65))
+                    .font(.dsEar)
+                    .foregroundStyle(.white.opacity(.dsSecondary))
             }
             .buttonStyle(.plain)
 
@@ -654,8 +654,8 @@ struct IslandView: View {
                 model.openPlayer()
             } label: {
                 Image(systemName: "arrow.up.forward.app")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.65))
+                    .font(.dsEar)
+                    .foregroundStyle(.white.opacity(.dsSecondary))
             }
             .buttonStyle(.plain)
         }

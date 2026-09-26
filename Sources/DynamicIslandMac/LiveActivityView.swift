@@ -45,7 +45,7 @@ struct LiveActivityLeading: View {
 
     var body: some View {
         Image(systemName: LiveActivityParts.symbolName(activity))
-            .font(.system(size: 14, weight: .semibold))
+            .font(.dsEar)
             .foregroundStyle(LiveActivityParts.accent(activity))
     }
 }
@@ -59,7 +59,7 @@ struct LiveActivityTrailing: View {
         case .running:
             if let progress = activity.progress {
                 ZStack {
-                    Circle().stroke(Color.white.opacity(0.22), lineWidth: 2.5)
+                    Circle().stroke(Color.white.opacity(.dsTrack), lineWidth: 2.5)
                     Circle()
                         .trim(from: 0, to: progress)
                         .stroke(LiveActivityParts.accent(activity), style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
@@ -76,7 +76,7 @@ struct LiveActivityTrailing: View {
             }
         case .success, .failure:
             Text(activity.title)
-                .font(.system(size: 12, weight: .semibold))
+                .font(.dsLabel)
                 .foregroundStyle(LiveActivityParts.accent(activity))
                 .lineLimit(1)
                 .frame(maxWidth: 70)
@@ -97,20 +97,20 @@ struct LiveActivityExpanded: View {
                     .frame(width: 28)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(activity.title)
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.dsCardTitle)
                         .foregroundStyle(.white)
                         .lineLimit(1)
                     if let subtitle = activity.subtitle {
                         Text(subtitle)
-                            .font(.system(size: 12))
-                            .foregroundStyle(.white.opacity(0.55))
+                            .font(.dsBody)
+                            .foregroundStyle(.white.opacity(.dsSecondary))
                             .lineLimit(2)
                     }
                 }
                 Spacer(minLength: 0)
                 if activity.state == .running, let progress = activity.progress {
                     Text("\(Int((progress * 100).rounded()))%")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.dsEar)
                         .foregroundStyle(accent)
                         .monospacedDigit()
                 }
@@ -119,7 +119,7 @@ struct LiveActivityExpanded: View {
                 if let progress = activity.progress {
                     GeometryReader { proxy in
                         ZStack(alignment: .leading) {
-                            Capsule().fill(Color.white.opacity(0.22))
+                            Capsule().fill(Color.white.opacity(.dsTrack))
                             Capsule().fill(accent).frame(width: proxy.size.width * progress)
                         }
                     }

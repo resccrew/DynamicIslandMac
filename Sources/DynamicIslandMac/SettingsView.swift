@@ -24,7 +24,7 @@ struct SettingsView: View {
                 Button("Сбросить всё") { settings.resetToDefaults() }
                 Spacer()
                 Text("Изменения применяются сразу")
-                    .font(.system(size: 11))
+                    .font(.dsCaption)
                     .foregroundColor(.secondary)
             }
             .padding(.horizontal, 20)
@@ -81,7 +81,7 @@ struct SettingsView: View {
         Group {
             section("Карточка") {
                 Toggle("Показывать на экране блокировки", isOn: $settings.lockScreenEnabled)
-                    .font(.system(size: 12))
+                    .font(.dsBody)
                 slider("Ширина карточки", $settings.lockScreenWidth, 240...600)
                 slider("Обложка развёрнутая", $settings.lockScreenArtSize, 200...560)
                 slider("Сдвиг по вертикали", $settings.lockScreenOffsetY, -350...350)
@@ -97,24 +97,24 @@ struct SettingsView: View {
 
             section("Текст песни") {
                 Toggle("Караоке", isOn: $settings.lyricsEnabled)
-                    .font(.system(size: 12))
+                    .font(.dsBody)
                 hint("Тексты берутся с lrclib.net — туда уходят название трека и исполнитель.")
             }
 
             section("Календарь и напоминания") {
                 Toggle("События календаря", isOn: $settings.calendarEnabled)
-                    .font(.system(size: 12))
+                    .font(.dsBody)
                 if settings.calendarEnabled {
                     slider("Предупреждать за, минут", $settings.eventLeadMinutes, 1...30)
                 }
                 Toggle("Напоминания", isOn: $settings.remindersEnabled)
-                    .font(.system(size: 12))
+                    .font(.dsBody)
                 hint("Берётся из системных «Календаря» и «Напоминаний», включая iCloud и Google.")
             }
 
             section("Питание") {
                 Toggle("Не гасить экран при блокировке", isOn: $settings.preventSleepOnLock)
-                    .font(.system(size: 12))
+                    .font(.dsBody)
                 if settings.preventSleepOnLock {
                     slider("Держать, минут", $settings.preventSleepMinutes, 1...120)
                     hint("По истечении времени экран гаснет сам, чтобы не сажать батарею.")
@@ -134,19 +134,19 @@ struct SettingsView: View {
 
             section("Полноэкранный режим") {
                 Toggle("Прятать при полноэкранном режиме", isOn: $settings.hideInFullScreen)
-                    .font(.system(size: 12))
+                    .font(.dsBody)
                 hint("Фильм или приложение на весь экран — остров исчезает и возвращается после выхода.")
             }
 
             section("Пауза") {
                 Toggle("Скрывать остров на паузе", isOn: $settings.hideWhenPaused)
-                    .font(.system(size: 12))
+                    .font(.dsBody)
                 hint("Выключено — остров на паузе остаётся, пока открыт источник (вкладка или приложение).")
             }
 
             section("Внешний API") {
                 Toggle("Разрешить внешний API (Live Activity)", isOn: $settings.allowExternalAPI)
-                    .font(.system(size: 12))
+                    .font(.dsBody)
                 hint("Скрипты и CI показывают прогресс в острове через tools/island. Только 127.0.0.1:47810, по токену.")
             }
 
@@ -155,19 +155,19 @@ struct SettingsView: View {
                     Text("Основной (экран со строкой меню)").tag(IslandDisplayPolicy.primary)
                     Text("Встроенный с вырезом").tag(IslandDisplayPolicy.builtIn)
                 }
-                .font(.system(size: 12))
+                .font(.dsBody)
                 hint("«Встроенный» без встроенного экрана (крышка закрыта) — как «Основной». Без выреза остров рисует свой, высотой со строку меню.")
             }
 
             section("Оформление окна") {
                 Toggle("Тень окна", isOn: $settings.showShadow)
-                    .font(.system(size: 12))
+                    .font(.dsBody)
                 hint("Выключена — остров сливается с чёрной рамкой экрана.")
             }
 
             section("Меню-бар") {
                 Toggle("Значок в меню-баре", isOn: $settings.showStatusIcon)
-                    .font(.system(size: 12))
+                    .font(.dsBody)
                 hint("Если выключить, настройки открываются повторным запуском приложения из «Программ».")
             }
         }
@@ -182,7 +182,7 @@ struct SettingsView: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 9) {
             Text(title)
-                .font(.system(size: 12, weight: .semibold))
+                .font(.dsLabel)
                 .foregroundColor(.secondary)
                 .textCase(.uppercase)
             content()
@@ -191,7 +191,7 @@ struct SettingsView: View {
 
     private func hint(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 11))
+            .font(.dsCaption)
             .foregroundColor(.secondary)
             .fixedSize(horizontal: false, vertical: true)
     }
@@ -204,11 +204,11 @@ struct SettingsView: View {
     ) -> some View {
         HStack(spacing: 10) {
             Text(label)
-                .font(.system(size: 12))
+                .font(.dsBody)
                 .frame(width: 160, alignment: .leading)
             Slider(value: value, in: range)
             Text(String(format: "%.\(decimals)f", value.wrappedValue))
-                .font(.system(size: 11, weight: .medium))
+                .font(.dsCaption)
                 .monospacedDigit()
                 .foregroundColor(.secondary)
                 .frame(width: 42, alignment: .trailing)
