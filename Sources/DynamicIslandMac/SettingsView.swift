@@ -132,6 +132,12 @@ struct SettingsView: View {
                 hint("Наведение — лёгкий подрост с вибрацией, клик — полное раскрытие.")
             }
 
+            section("Полноэкранный режим") {
+                Toggle("Прятать при полноэкранном режиме", isOn: $settings.hideInFullScreen)
+                    .font(.system(size: 12))
+                hint("Фильм или приложение на весь экран — остров исчезает и возвращается после выхода.")
+            }
+
             section("Пауза") {
                 Toggle("Скрывать остров на паузе", isOn: $settings.hideWhenPaused)
                     .font(.system(size: 12))

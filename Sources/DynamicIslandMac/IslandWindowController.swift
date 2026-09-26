@@ -47,6 +47,10 @@ final class IslandWindowController: NSWindowController {
     private let model: IslandViewModel
     private let settings = IslandSettings.shared
     private var cancellables = Set<AnyCancellable>()
+    /// True while a fullscreen app covers the island's display and the
+    /// setting asks to get out of the way.
+    private(set) var isFullScreenHidden = false
+    private var fullScreenTimer: Timer?
 
     init(model: IslandViewModel) {
         self.model = model
@@ -81,6 +85,8 @@ final class IslandWindowController: NSWindowController {
             .sink { [weak self] in
                 guard let self else { return }
                 self.window?.hasShadow = self.settings.showShadow
+                (self.window as? IslandPanel)?.applySpaceBehavior(hideInFullScreen: self.settings.hideInFullScreen)
+                self.updateFullScreenHiding()
                 self.model.settingsChanged()
                 self.positionContainer()
             }
@@ -97,11 +103,57 @@ final class IslandWindowController: NSWindowController {
                 self.settings.objectWillChange.send()
             }
             .store(in: &cancellables)
+
+        observeFullScreen()
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    // MARK: - Fullscreen
+
+    /// Space switches and app activations are when fullscreen starts or ends;
+    /// the entering animation finishes after the notification, so re-check a
+    /// moment later too. A slow timer catches anything else (a player going
+    /// borderless-fullscreen within the same Space).
+    private func observeFullScreen() {
+        let center = NSWorkspace.shared.notificationCenter
+        for name in [NSWorkspace.activeSpaceDidChangeNotification, NSWorkspace.didActivateApplicationNotification] {
+            center.publisher(for: name)
+                .receive(on: RunLoop.main)
+                .sink { [weak self] _ in
+                    self?.updateFullScreenHiding()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
+                        self?.updateFullScreenHiding()
+                    }
+                }
+                .store(in: &cancellables)
+        }
+        fullScreenTimer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { [weak self] _ in
+            self?.updateFullScreenHiding()
+        }
+        updateFullScreenHiding()
+    }
+
+    private func updateFullScreenHiding() {
+        guard let panel = window else { return }
+        let hide = settings.hideInFullScreen
+            && (IslandDisplay.screen.map(IslandDisplay.isShowingFullScreen) ?? false)
+        guard hide != isFullScreenHidden else { return }
+        isFullScreenHidden = hide
+        // Alpha rather than orderOut: the panel stays placed and joined to
+        // every Space, and comes back with a fade instead of a jump.
+        panel.ignoresMouseEvents = hide
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.25
+            panel.animator().alphaValue = hide ? 0 : 1
+        }
+    }
+
+    deinit {
+        fullScreenTimer?.invalidate()
     }
 
     /// Fixed frame pinned to the top-center of the display; only the SwiftUI

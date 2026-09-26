@@ -1,8 +1,8 @@
 import AppKit
 
 /// Borderless, non-activating panel pinned under the notch. Floats above
-/// everything (including full-screen apps) and never steals focus or shows
-/// up in the Dock/Cmd-Tab switcher.
+/// everything and never steals focus or shows up in the Dock/Cmd-Tab
+/// switcher. Over fullscreen Spaces only when `hideInFullScreen` is off.
 final class IslandPanel: NSPanel {
     init(contentRect: NSRect) {
         super.init(
@@ -16,10 +16,19 @@ final class IslandPanel: NSPanel {
         backgroundColor = .clear
         hasShadow = IslandSettings.shared.showShadow
         level = .statusBar
-        collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
+        applySpaceBehavior(hideInFullScreen: IslandSettings.shared.hideInFullScreen)
         isMovable = false
         hidesOnDeactivate = false
         isReleasedWhenClosed = false
+    }
+
+    /// Without `.fullScreenAuxiliary` the window server keeps the panel off
+    /// fullscreen Spaces by itself — the first line of defence; the window
+    /// controller's fullscreen check covers what that misses.
+    func applySpaceBehavior(hideInFullScreen: Bool) {
+        var behavior: NSWindow.CollectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
+        if !hideInFullScreen { behavior.insert(.fullScreenAuxiliary) }
+        if collectionBehavior != behavior { collectionBehavior = behavior }
     }
 
     override var canBecomeKey: Bool { false }

@@ -452,6 +452,7 @@ final class DebugControlServer {
                 "lyricsEnabled": settings.lyricsEnabled,
                 "showShadow": settings.showShadow,
                 "hideWhenPaused": settings.hideWhenPaused,
+                "hideInFullScreen": settings.hideInFullScreen,
             ],
         ]
         if let panel = islandController?.window {
@@ -459,6 +460,7 @@ final class DebugControlServer {
                 "frame": topLeft(panel.frame, in: screenFrame),
                 "visible": panel.isVisible,
                 "alpha": panel.alphaValue,
+                "isFullScreenHidden": islandController?.isFullScreenHidden ?? false,
             ]
         }
         if let rect = islandController?.debugIslandScreenRect {

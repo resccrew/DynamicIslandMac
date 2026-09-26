@@ -403,3 +403,17 @@ def test_missing_setting_defaults_to_stay_visible():
     s = paused_stays_state()
     del s["settings"]
     assert invariants.check(s) == []
+
+
+# --- hide in fullscreen ---
+
+def test_fullscreen_hidden_panel_may_be_transparent():
+    s = playing_state()
+    s["islandWindow"] = dict(s["islandWindow"], alpha=0, isFullScreenHidden=True)
+    assert invariants.check(s) == []
+
+
+def test_faded_panel_without_fullscreen_is_violation():
+    s = playing_state()
+    s["islandWindow"] = dict(s["islandWindow"], alpha=0, isFullScreenHidden=False)
+    assert any("without fullscreen" in v for v in invariants.check(s))

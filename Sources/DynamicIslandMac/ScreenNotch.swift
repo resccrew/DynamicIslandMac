@@ -47,8 +47,35 @@ enum IslandDisplay {
     }
 
     private static func isBuiltIn(_ screen: NSScreen) -> Bool {
+        guard let id = displayID(for: screen) else { return false }
+        return CGDisplayIsBuiltin(id) != 0
+    }
+
+    static func displayID(for screen: NSScreen) -> CGDirectDisplayID? {
         let key = NSDeviceDescriptionKey("NSScreenNumber")
-        guard let number = screen.deviceDescription[key] as? NSNumber else { return false }
-        return CGDisplayIsBuiltin(CGDirectDisplayID(number.uint32Value)) != 0
+        return (screen.deviceDescription[key] as? NSNumber).map { CGDirectDisplayID($0.uint32Value) }
+    }
+
+    /// Whether another app fills the island's display right now (native
+    /// fullscreen, or a borderless player covering it). Main thread.
+    static func isShowingFullScreen(_ screen: NSScreen) -> Bool {
+        guard let id = displayID(for: screen),
+              let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID)
+                as? [[String: Any]]
+        else { return false }
+        let windows = list.compactMap { info -> ScreenWindow? in
+            guard
+                let pid = info[kCGWindowOwnerPID as String] as? Int32,
+                let layer = info[kCGWindowLayer as String] as? Int,
+                let boundsDict = info[kCGWindowBounds as String] as? NSDictionary,
+                let bounds = CGRect(dictionaryRepresentation: boundsDict as CFDictionary)
+            else { return nil }
+            return ScreenWindow(ownerPID: pid, layer: layer, bounds: bounds)
+        }
+        return FullScreenDetection.isFullScreen(
+            windows: windows,
+            displayBounds: CGDisplayBounds(id),
+            ownPID: ProcessInfo.processInfo.processIdentifier
+        )
     }
 }

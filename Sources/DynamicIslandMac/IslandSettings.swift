@@ -72,6 +72,9 @@ final class IslandSettings: ObservableObject {
     /// Off by default — a paused track stays while its source is open.
     @Published var hideWhenPaused: Bool { didSet { persist() } }
 
+    /// Get out of the way of fullscreen video and apps on the island's display.
+    @Published var hideInFullScreen: Bool { didSet { persist() } }
+
     /// Which display hosts the island when several are connected.
     @Published var displayPolicy: IslandDisplayPolicy { didSet { persist() } }
 
@@ -119,6 +122,7 @@ final class IslandSettings: ObservableObject {
         static let preventSleepMinutes = 10.0
         static let showStatusIcon = true
         static let hideWhenPaused = false
+        static let hideInFullScreen = true
         static let displayPolicy = IslandDisplayPolicy.primary
     }
 
@@ -170,6 +174,8 @@ final class IslandSettings: ObservableObject {
         preventSleepMinutes = Self.read("preventSleepMinutes", Defaults.preventSleepMinutes)
         showStatusIcon = UserDefaults.standard.object(forKey: "showStatusIcon") as? Bool ?? Defaults.showStatusIcon
         hideWhenPaused = UserDefaults.standard.object(forKey: "hideWhenPaused") as? Bool ?? Defaults.hideWhenPaused
+        hideInFullScreen = UserDefaults.standard.object(forKey: "hideInFullScreen") as? Bool
+            ?? Defaults.hideInFullScreen
         displayPolicy = IslandDisplayPolicy(stored: UserDefaults.standard.string(forKey: "displayPolicy"))
 
         isLoading = false
@@ -326,6 +332,7 @@ final class IslandSettings: ObservableObject {
         preventSleepMinutes = Defaults.preventSleepMinutes
         showStatusIcon = Defaults.showStatusIcon
         hideWhenPaused = Defaults.hideWhenPaused
+        hideInFullScreen = Defaults.hideInFullScreen
         displayPolicy = Defaults.displayPolicy
         isLoading = false
         persist()
@@ -373,6 +380,7 @@ final class IslandSettings: ObservableObject {
         d.set(preventSleepMinutes, forKey: "preventSleepMinutes")
         d.set(showStatusIcon, forKey: "showStatusIcon")
         d.set(hideWhenPaused, forKey: "hideWhenPaused")
+        d.set(hideInFullScreen, forKey: "hideInFullScreen")
         d.set(displayPolicy.rawValue, forKey: "displayPolicy")
     }
 }
