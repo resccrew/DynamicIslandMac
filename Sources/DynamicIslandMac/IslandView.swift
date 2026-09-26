@@ -318,7 +318,7 @@ struct IslandView: View {
         } trailing: {
             Text(formatCountdown(model.timerRemaining ?? 0))
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundColor(model.isTimerPaused ? .white.opacity(0.5) : Self.timerOrange)
+                .foregroundColor(model.isTimerPaused ? .white.opacity(DS.Opacity.secondary) : Self.timerOrange)
                 .monospacedDigit()
                 .lineLimit(1)
         }
@@ -335,7 +335,7 @@ struct IslandView: View {
                     .lineLimit(1)
                 Text(formatCountdown(model.timerRemaining ?? 0))
                     .font(.system(size: 34, weight: .semibold))
-                    .foregroundColor(model.isTimerPaused ? .white.opacity(0.5) : Self.timerOrange)
+                    .foregroundColor(model.isTimerPaused ? .white.opacity(DS.Opacity.secondary) : Self.timerOrange)
                     .monospacedDigit()
             }
 
@@ -452,7 +452,7 @@ struct IslandView: View {
                             .frame(width: 40, alignment: .leading)
                         Text(event.title)
                             .font(.system(size: 12))
-                            .foregroundColor(.white.opacity(0.85))
+                            .foregroundColor(.white.opacity(DS.Opacity.secondary))
                             .lineLimit(1)
                     }
                 }
@@ -469,14 +469,14 @@ struct IslandView: View {
                         .frame(width: 40, alignment: .leading)
                         Text(reminder.title)
                             .font(.system(size: 12))
-                            .foregroundColor(isOverdue(reminder) ? Self.calendarRed : .white.opacity(0.85))
+                            .foregroundColor(isOverdue(reminder) ? Self.calendarRed : .white.opacity(DS.Opacity.secondary))
                             .lineLimit(1)
                     }
                 }
                 if laterEvents.isEmpty && reminders.isEmpty {
                     Text("На сегодня больше ничего")
                         .font(.system(size: 12))
-                        .foregroundColor(.white.opacity(0.5))
+                        .foregroundColor(.white.opacity(DS.Opacity.secondary))
                 }
             }
         }
@@ -596,7 +596,7 @@ struct IslandView: View {
                 // Live streams (YouTube/Twitch live) have no length.
                 Text("LIVE")
                     .font(.system(size: 10, weight: .bold))
-                    .foregroundColor(.red.opacity(0.85))
+                    .foregroundColor(.red.opacity(DS.Opacity.secondary))
             }
         }
     }
