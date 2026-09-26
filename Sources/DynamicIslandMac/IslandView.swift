@@ -156,12 +156,15 @@ struct IslandView: View {
         earsRow {
             artworkView(size: settings.collapsedArtwork)
         } trailing: {
+            // Paused: the bars already lie flat as dots; dim them too so the
+            // pause reads clearly on an island that now stays visible.
             EqualizerView(
                 isPlaying: model.isPlaying,
                 color: model.accent,
                 barWidth: 2,
                 maxHeight: 12
             )
+            .opacity(model.isPlaying ? 1 : 0.45)
         }
     }
 

@@ -155,6 +155,18 @@ final class NowPlayingPoller {
             accent = cachedAccent
         }
 
+        // An app that is still registered but no longer has anything loaded
+        // (its tab was closed) can report a bare, paused, untitled entry.
+        // That is a source that went away, not a paused track; since a paused
+        // track now keeps the island up, it must clear instead.
+        if !info.isPlaying && info.title.isEmpty && info.artist.isEmpty && info.album.isEmpty {
+            deliver(NowPlayingSnapshot(
+                title: "", artist: "", artwork: nil, accent: nil,
+                isPlaying: false, position: 0, duration: 0, playerBundleID: nil
+            ))
+            return
+        }
+
         let duration = info.duration ?? 0
         var position = info.elapsed
         if info.isPlaying {

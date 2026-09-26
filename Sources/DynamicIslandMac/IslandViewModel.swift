@@ -342,7 +342,11 @@ final class IslandViewModel: ObservableObject {
     /// So is an event that just started or a reminder that just fell due, and
     /// the agenda card opened from the menu bar.
     var isIslandVisible: Bool {
-        (isPlaying && !title.isEmpty) || isTimerActive || call != nil || isAgendaNow || isAgendaPinned
+        IslandVisibility.mediaVisible(
+            isPlaying: isPlaying,
+            hasTrack: hasContent,
+            hideWhenPaused: IslandSettings.shared.hideWhenPaused
+        ) || isTimerActive || call != nil || isAgendaNow || isAgendaPinned
     }
 
     /// The track fills the island: while playing, and — paused — while the
@@ -350,7 +354,12 @@ final class IslandViewModel: ObservableObject {
     /// under the pointer. `isIslandVisible` stays play-gated, so once the
     /// pointer leaves a paused island hides (the Spotify "stuck" bug above).
     var showsMedia: Bool {
-        IslandVisibility.showsMedia(isPlaying: isPlaying, hasTrack: hasContent, isOpen: isHovering || isPinnedOpen)
+        IslandVisibility.showsMedia(
+            isPlaying: isPlaying,
+            hasTrack: hasContent,
+            isOpen: isHovering || isPinnedOpen,
+            hideWhenPaused: IslandSettings.shared.hideWhenPaused
+        )
     }
 
     /// Changes exactly once per track, driving the artwork flip.
@@ -549,6 +558,12 @@ final class IslandViewModel: ObservableObject {
     /// YouTube tab or a podcast app.
     var displayArtwork: NSImage? {
         artwork ?? playerBundleID.flatMap(AppIcons.icon(for:))
+    }
+
+    /// Settings such as `hideWhenPaused` change visibility without any
+    /// playback event; the window controller calls this on every edit.
+    func settingsChanged() {
+        sync()
     }
 
     private func sync() {

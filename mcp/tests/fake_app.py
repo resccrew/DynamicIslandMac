@@ -21,6 +21,8 @@ BASE_STATE: dict[str, Any] = {
     "glanceTitle": None,
     "hoverSimulated": False,
     "injecting": False,
+    # The legacy "hide on pause" mode, which most tests below exercise.
+    "settings": {"hideWhenPaused": True},
     "screen": {"frame": {"x": 0, "y": 0, "width": 1512, "height": 982}, "scale": 2, "hasNotch": True},
     "notchRect": {"x": 663, "y": 0, "width": 186, "height": 32},
     "islandWindow": {"frame": {"x": 589, "y": 0, "width": 334, "height": 205}, "visible": True, "alpha": 1},

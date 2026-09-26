@@ -451,6 +451,7 @@ final class DebugControlServer {
                 "lockScreenEnabled": settings.lockScreenEnabled,
                 "lyricsEnabled": settings.lyricsEnabled,
                 "showShadow": settings.showShadow,
+                "hideWhenPaused": settings.hideWhenPaused,
             ],
         ]
         if let panel = islandController?.window {
