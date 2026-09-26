@@ -23,6 +23,10 @@ final class DebugControlServer {
     /// While true the real poller's snapshots are dropped, so an injected
     /// track isn't overwritten a second later.
     private(set) var isInjecting = false
+    /// The fake track, so play/pause and skips act on it instead of a player.
+    private var injected: NowPlayingSnapshot?
+    /// Skips pressed on the fake track (next minus previous), for /state.
+    private var injectedSkips = 0
     /// Same for the call monitor while a call is injected.
     private(set) var isInjectingCall = false
     /// Same for the system Clock timers while a timer is injected.
@@ -159,6 +163,11 @@ final class DebugControlServer {
             return inject(body)
         case ("POST", "/inject/clear"):
             isInjecting = false
+            injected = nil
+            injectedSkips = 0
+            poller?.commandInterceptor = nil
+            // The poller skips unchanged idle states; make it re-send the real one.
+            poller?.resync()
             releasePointer()
             record("injection cleared, real poller resumed")
             return (200, ["ok": true])
@@ -286,9 +295,40 @@ final class DebugControlServer {
             duration: body["duration"] as? Double ?? 200,
             playerBundleID: body["bundle_id"] as? String
         )
+        injected = snapshot
+        injectedSkips = 0
+        poller?.commandInterceptor = { [weak self] command in
+            self?.handleInjectedCommand(command) ?? false
+        }
         model.apply(snapshot)
         record("injected now-playing (playing=\(snapshot.isPlaying))")
         return (200, ["ok": true, "state": "\(model.state)"])
+    }
+
+    /// Buttons and /simulate/command during an injection: act on the fake
+    /// track (toggle it, restart it on a skip) and never reach a real player.
+    private func handleInjectedCommand(_ command: NowPlayingCommand) -> Bool {
+        guard isInjecting, let fake = injected else { return false }
+        let isPlaying = command == .togglePlayPause ? !fake.isPlaying : fake.isPlaying
+        switch command {
+        case .togglePlayPause: break
+        case .next: injectedSkips += 1
+        case .previous: injectedSkips -= 1
+        }
+        let next = NowPlayingSnapshot(
+            title: fake.title,
+            artist: fake.artist,
+            artwork: fake.artwork,
+            accent: fake.accent,
+            isPlaying: isPlaying,
+            position: command == .togglePlayPause ? model.position : 0,
+            duration: fake.duration,
+            playerBundleID: fake.playerBundleID
+        )
+        injected = next
+        model.apply(next)
+        record("fake player handled \(command.rawValue) (playing=\(isPlaying))")
+        return true
     }
 
     private func injectCall(_ body: [String: Any]) -> (Int, [String: Any]) {
@@ -394,7 +434,8 @@ final class DebugControlServer {
             "lyricsCount": model.lyrics.count,
             "currentLyricIndex": model.currentLyricIndex as Any? ?? NSNull(),
             "lockPresentation": "\(model.lockPresentation)",
-            "isLockScreenVisible": model.isLockScreenVisible,
+            // The preview shows the card without locking; count it too.
+            "isLockScreenVisible": model.isLockScreenVisible || (lockController?.window?.isVisible ?? false),
             "timerRemaining": model.timerRemaining as Any? ?? NSNull(),
             "timer": model.systemTimer.map { timer -> [String: Any] in
                 [
@@ -422,6 +463,7 @@ final class DebugControlServer {
             ] as [String: Any],
             "injecting": isInjecting,
             "injectingCall": isInjectingCall,
+            "injectedSkips": injectedSkips,
             "content": model.content.rawValue,
             "playerBundleID": model.playerBundleID as Any? ?? NSNull(),
             "nowPlayingSource": poller?.source.rawValue ?? "none",

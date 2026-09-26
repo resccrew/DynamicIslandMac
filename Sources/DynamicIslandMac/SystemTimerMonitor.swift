@@ -1,23 +1,9 @@
 import Foundation
+import IslandLogic
 
-/// A countdown from the system Clock (Часы) — started in the app, by Siri or
-/// by a Shortcut; they all live in the same `mobiletimerd` daemon.
-struct SystemTimer: Equatable {
-    let id: String
-    let title: String
-    let duration: TimeInterval
-    /// When a running timer goes off; nil while paused.
-    let fireDate: Date?
-    /// Time left, frozen while paused.
-    let pausedRemaining: TimeInterval?
-
-    var isPaused: Bool { fireDate == nil }
-
-    func remaining(at now: Date = Date()) -> TimeInterval {
-        if let fireDate { return max(0, fireDate.timeIntervalSince(now)) }
-        return pausedRemaining ?? duration
-    }
-}
+/// Kept under its old name for the rest of the app; the parsing and state
+/// rules live in `IslandLogic` so they can be unit-tested.
+typealias SystemTimer = TimerSnapshot
 
 /// Follows the system Clock's timers without any timer API.
 ///
@@ -27,7 +13,7 @@ struct SystemTimer: Equatable {
 /// state, duration, and the exact date the next alert fires — at the default
 /// level, readable by any admin user. So this reads the log:
 ///
-/// - at start, `log show` over the last day rebuilds the timers that are
+/// - at start, `log show` over the last 12 hours rebuilds the timers that are
 ///   already running or paused;
 /// - then `log stream` follows changes as they happen (event-driven, no polling).
 ///
@@ -43,9 +29,10 @@ final class SystemTimerMonitor {
     private var onFire: ((String) -> Void)?
 
     /// Touched only on `queue`.
-    private var timers: [String: SystemTimer] = [:]
-    /// Last fire date seen per timer, kept across pauses. Touched only on `queue`.
-    private var fireDates: [String: Date] = [:]
+    private var store = TimerLogStore()
+    /// Restarts of a `log stream` that keeps dying without output back off
+    /// and eventually stop, instead of respawning every 2s forever.
+    private var backoff = TimerRestartBackoff()
     private var stream: Process?
     private var buffer = Data()
     private var stopped = false
@@ -80,7 +67,7 @@ final class SystemTimerMonitor {
     private func bootstrap() {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/log")
-        process.arguments = ["show", "--last", "1d", "--style", "ndjson", "--predicate", Self.predicate]
+        process.arguments = ["show", "--last", "12h", "--style", "ndjson", "--predicate", Self.predicate]
         let pipe = Pipe()
         process.standardOutput = pipe
         process.standardError = FileHandle.nullDevice
@@ -92,8 +79,7 @@ final class SystemTimerMonitor {
             handle(line: Data(line), live: false)
         }
         // Anything whose alert time has passed went off while nobody watched.
-        let now = Date()
-        timers = timers.filter { $0.value.fireDate.map { $0 > now } ?? true }
+        store.dropExpired(now: Date())
         publish()
     }
 
@@ -105,21 +91,41 @@ final class SystemTimerMonitor {
         let pipe = Pipe()
         process.standardOutput = pipe
         process.standardError = FileHandle.nullDevice
+        // Touched only on `queue`.
+        var sawOutput = false
         pipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let chunk = handle.availableData
-            self?.queue.async { self?.consume(chunk) }
+            guard !chunk.isEmpty else { return }
+            self?.queue.async {
+                if !sawOutput {
+                    sawOutput = true
+                    self?.backoff.succeeded()
+                }
+                self?.consume(chunk)
+            }
         }
         process.terminationHandler = { [weak self] _ in
             pipe.fileHandleForReading.readabilityHandler = nil
             // `log` can exit on its own (e.g. after sleep); pick it back up.
-            self?.queue.asyncAfter(deadline: .now() + 2) { self?.startStream() }
+            self?.queue.async { self?.scheduleRestart(sawOutput: sawOutput) }
         }
         do {
             try process.run()
             stream = process
         } catch {
             stream = nil
+            scheduleRestart(sawOutput: false)
         }
+    }
+
+    private func scheduleRestart(sawOutput: Bool) {
+        guard !stopped else { return }
+        stream = nil
+        buffer.removeAll()
+        if sawOutput { backoff.succeeded() }
+        // A stream that ran fine and then exited restarts at the base delay.
+        guard let delay = sawOutput ? backoff.base : backoff.failed() else { return }
+        queue.asyncAfter(deadline: .now() + delay) { [weak self] in self?.startStream() }
     }
 
     private func consume(_ chunk: Data) {
@@ -137,157 +143,19 @@ final class SystemTimerMonitor {
     private func handle(line: Data, live: Bool) {
         guard let object = try? JSONSerialization.jsonObject(with: line) as? [String: Any],
               let message = object["eventMessage"] as? String,
-              let stamp = (object["timestamp"] as? String).flatMap(Self.parseTimestamp)
+              let stamp = (object["timestamp"] as? String).flatMap(TimerLogParser.parseTimestamp)
         else { return }
 
-        if let trigger = Self.parseTrigger(message) {
-            fireDates[trigger.id] = trigger.date
-            if let timer = timers[trigger.id], !timer.isPaused {
-                timers[trigger.id] = SystemTimer(
-                    id: timer.id, title: timer.title, duration: timer.duration,
-                    fireDate: trigger.date, pausedRemaining: nil
-                )
-                if live { publish() }
-            }
-            return
+        let outcome = store.handle(message: message, at: stamp)
+        guard live else { return }
+        for title in outcome.fired {
+            DispatchQueue.main.async { [weak self] in self?.onFire?(title) }
         }
-
-        // Only the store's own change reports: the scheduler and notification
-        // lines repeat the same timers with stale states.
-        let states: Substring
-        if let range = message.range(of: "toTimers:") {
-            states = message[range.upperBound...]
-        } else if message.contains("didAddTimers") {
-            states = message[...]
-        } else {
-            return
-        }
-
-        var changed = false
-        for entry in Self.parseEntries(states) {
-            changed = apply(entry, at: stamp, live: live) || changed
-        }
-        if changed && live { publish() }
-    }
-
-    private func apply(_ entry: Entry, at stamp: Date, live: Bool) -> Bool {
-        let previous = timers[entry.id]
-        switch entry.state {
-        case "Running":
-            // A resume logs its new trigger a moment later; until then,
-            // estimate from what was left.
-            let known = fireDates[entry.id].flatMap { $0 > stamp ? $0 : nil }
-            let estimate = stamp.addingTimeInterval(previous?.pausedRemaining ?? entry.duration)
-            let fireDate = previous?.isPaused == true ? estimate : (known ?? estimate)
-            timers[entry.id] = SystemTimer(
-                id: entry.id, title: entry.title, duration: entry.duration,
-                fireDate: fireDate, pausedRemaining: nil
-            )
-        case "Paused":
-            let left = (previous?.fireDate ?? fireDates[entry.id])
-                .map { max(0, $0.timeIntervalSince(stamp)) } ?? entry.duration
-            timers[entry.id] = SystemTimer(
-                id: entry.id, title: entry.title, duration: entry.duration,
-                fireDate: nil, pausedRemaining: left
-            )
-        default:
-            // Stopped: gone from the island. Went off only if it has a fire date.
-            guard previous != nil else { return false }
-            timers[entry.id] = nil
-            fireDates[entry.id] = nil
-            if live && entry.fired {
-                let title = entry.title
-                DispatchQueue.main.async { [weak self] in self?.onFire?(title) }
-            }
-        }
-        return timers[entry.id] != previous
+        if outcome.changed { publish() }
     }
 
     private func publish() {
-        let snapshot = Array(timers.values)
+        let snapshot = Array(store.timers.values)
         DispatchQueue.main.async { [weak self] in self?.onChange?(snapshot) }
     }
-
-    struct Entry: Equatable {
-        let id: String
-        let title: String
-        let state: String
-        let duration: TimeInterval
-        let fired: Bool
-    }
-
-    private static let entryRegex = try? NSRegularExpression(
-        pattern: #"TimerID: ([0-9A-Fa-f-]{36}), Title: (.*?), state:(\w+), duration:([0-9.]+), firedDate: (\(null\)|[^,]+)"#
-    )
-
-    private static let triggerRegex = try? NSRegularExpression(
-        pattern: #"([0-9A-Fa-f-]{36}) has next trigger .*?date: "([^"]+)""#
-    )
-
-    static func parseEntries(_ text: Substring) -> [Entry] {
-        guard let regex = entryRegex else { return [] }
-        let string = String(text)
-        let range = NSRange(string.startIndex..., in: string)
-        return regex.matches(in: string, range: range).compactMap { match in
-            func group(_ i: Int) -> String? {
-                Range(match.range(at: i), in: string).map { String(string[$0]) }
-            }
-            guard let id = group(1), let state = group(3),
-                  let duration = group(4).flatMap(TimeInterval.init)
-            else { return nil }
-            // UI-started timers have an empty title; Siri's default is internal.
-            let raw = group(2) ?? ""
-            let title = raw == "CURRENT_TIMER" ? "" : raw
-            return Entry(id: id, title: title, state: state, duration: duration,
-                         fired: group(5) != "(null)")
-        }
-    }
-
-    static func parseTrigger(_ message: String) -> (id: String, date: Date)? {
-        guard let regex = triggerRegex,
-              let match = regex.firstMatch(in: message, range: NSRange(message.startIndex..., in: message)),
-              let idRange = Range(match.range(at: 1), in: message),
-              let dateRange = Range(match.range(at: 2), in: message),
-              let date = parseTriggerDate(String(message[dateRange]))
-        else { return nil }
-        return (String(message[idRange]), date)
-    }
-
-    /// "Wednesday, September 23, 2026 at 11:05:35 AM Central European Summer Time",
-    /// with a narrow no-break space before AM/PM.
-    static func parseTriggerDate(_ text: String) -> Date? {
-        let cleaned = text
-            .replacingOccurrences(of: "\u{202F}", with: " ")
-            .replacingOccurrences(of: "\u{00A0}", with: " ")
-        triggerFormatter.timeZone = nil
-        for format in ["EEEE, MMMM d, yyyy 'at' h:mm:ss a zzzz", "EEEE, MMMM d, yyyy 'at' HH:mm:ss zzzz"] {
-            triggerFormatter.dateFormat = format
-            if let date = triggerFormatter.date(from: cleaned) { return date }
-        }
-        // Unknown zone name: the daemon logs in local time, so drop it.
-        if let cut = cleaned.range(of: #" (AM|PM) "#, options: .regularExpression) {
-            triggerFormatter.dateFormat = "EEEE, MMMM d, yyyy 'at' h:mm:ss a"
-            triggerFormatter.timeZone = .current
-            return triggerFormatter.date(from: String(cleaned[..<cut.upperBound]).trimmingCharacters(in: .whitespaces))
-        }
-        return nil
-    }
-
-    private static let triggerFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        return formatter
-    }()
-
-    /// "2026-09-23 11:05:23.890190+0200"
-    static func parseTimestamp(_ text: String) -> Date? {
-        timestampFormatter.date(from: text)
-    }
-
-    private static let timestampFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss.SSSSSSZ"
-        return formatter
-    }()
 }

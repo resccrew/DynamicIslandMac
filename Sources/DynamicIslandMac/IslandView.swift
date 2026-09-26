@@ -49,8 +49,9 @@ struct IslandView: View {
                     actionLabel: model.glanceAction?.label,
                     onAction: { model.performGlanceAction() }
                 )
-                    // Keep the text clear of the camera cutout.
-                    .padding(.top, settings.collapsedHeight)
+                    // Keep the text clear of the camera cutout; without one,
+                    // just clear the menu bar row the island hangs from.
+                    .padding(.top, model.hasNotch ? settings.collapsedHeight : IslandSettings.glanceTopInsetWithoutNotch)
                     .id(title)
                     .transition(.opacity)
             } else if let call = model.call {
@@ -385,7 +386,13 @@ struct IslandView: View {
     }
 
     private var agendaCollapsedTime: String {
-        if let event = model.agenda.nowEvent { return IslandViewModel.clock(event.start) }
+        if let event = model.agenda.nowEvent {
+            switch AgendaFormat.collapsedLabel(start: event.start, end: event.end, now: Date()) {
+            case .startsAt(let start): return IslandViewModel.clock(start)
+            case .minutesLeft(let minutes): return "ещё \(minutes) мин"
+            case .endsAt(let end): return "до \(IslandViewModel.clock(end))"
+            }
+        }
         if let due = model.agenda.nowReminder?.due { return IslandViewModel.clock(due) }
         return IslandViewModel.clock(Date())
     }
@@ -395,7 +402,9 @@ struct IslandView: View {
     private var agendaExpandedContent: some View {
         let agenda = model.agenda
         let laterEvents = agenda.events.filter { $0 != agenda.nowEvent }.prefix(3)
-        let reminders = agenda.reminders.filter { $0 != agenda.nowReminder }.prefix(4)
+        let reminders = AgendaFormat.listedReminders(
+            agenda.reminders, nowReminder: agenda.nowReminder, hasNowEvent: agenda.nowEvent != nil
+        ).prefix(4)
 
         return VStack(alignment: .leading, spacing: 8) {
             if let event = agenda.nowEvent {
@@ -429,7 +438,7 @@ struct IslandView: View {
                     HStack(spacing: 8) {
                         Text(IslandViewModel.clock(event.start))
                             .font(.system(size: 12, weight: .semibold))
-                            .foregroundColor(Self.calendarRed)
+                            .foregroundColor(.white.opacity(0.6))
                             .monospacedDigit()
                             .frame(width: 40, alignment: .leading)
                         Text(event.title)
@@ -554,7 +563,7 @@ struct IslandView: View {
     /// Elapsed, bar and remaining on one line, like the iOS player.
     private var progressRow: some View {
         HStack(spacing: 8) {
-            Text(formatTime(model.position))
+            Text(FormatTime.playback(position: model.position, duration: model.duration).elapsed)
                 .font(.system(size: 11, weight: .medium))
                 .foregroundColor(.white.opacity(0.45))
                 .monospacedDigit()
@@ -570,7 +579,7 @@ struct IslandView: View {
             .frame(height: 4)
 
             if model.duration > 0 {
-                Text("-\(formatTime(max(0, model.duration - model.position)))")
+                Text("-\(FormatTime.playback(position: model.position, duration: model.duration).remaining)")
                     .font(.system(size: 11, weight: .medium))
                     .foregroundColor(.white.opacity(0.45))
                     .monospacedDigit()
@@ -588,18 +597,9 @@ struct IslandView: View {
         return CGFloat(min(1, max(0, model.position / model.duration)))
     }
 
-    /// Timers run past an hour, unlike most tracks: 1:05:09 rather than 65:09.
-    private func formatCountdown(_ seconds: Double) -> String {
-        guard seconds.isFinite, seconds >= 3600 else { return formatTime(seconds) }
-        let total = Int(seconds)
-        return String(format: "%d:%02d:%02d", total / 3600, total / 60 % 60, total % 60)
-    }
+    private func formatCountdown(_ seconds: Double) -> String { FormatTime.clock(seconds) }
 
-    private func formatTime(_ seconds: Double) -> String {
-        guard seconds.isFinite, seconds >= 0 else { return "0:00" }
-        let total = Int(seconds)
-        return String(format: "%d:%02d", total / 60, total % 60)
-    }
+    private func formatTime(_ seconds: Double) -> String { FormatTime.clock(seconds) }
 
     private var controlsRow: some View {
         HStack(spacing: 14) {

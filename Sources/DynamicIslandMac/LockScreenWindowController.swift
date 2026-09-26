@@ -98,7 +98,9 @@ final class LockScreenWindowController: NSWindowController {
 
             // loginwindow re-orders itself as it settles, so keep reclaiming the
             // top spot for as long as the screen stays locked.
-            if locked, self.settings.lockScreenEnabled, self.model.hasContent,
+            // Unlocked: nothing to reclaim, the tick is just a cheap flag read.
+            guard locked else { return }
+            if self.settings.lockScreenEnabled, self.model.isLockScreenVisible, self.model.hasContent,
                let window = self.window {
                 window.orderFrontRegardless()
                 SkyLightSpace.add(window)
@@ -137,6 +139,8 @@ final class LockScreenWindowController: NSWindowController {
     }
 
     @objc private func screenLocked() {
+        // Keep the poller in sync so it does not re-run this handler a second later.
+        wasLocked = true
         Self.log("screenIsLocked enabled=\(settings.lockScreenEnabled) hasContent=\(model.hasContent) title=\(model.title)")
         if settings.preventSleepOnLock {
             sleepBlocker.begin(minutes: settings.preventSleepMinutes)
@@ -155,6 +159,7 @@ final class LockScreenWindowController: NSWindowController {
     }
 
     @objc private func screenUnlocked() {
+        wasLocked = false
         Self.log("screenIsUnlocked")
         model.isLockScreenVisible = false
         sleepBlocker.end()

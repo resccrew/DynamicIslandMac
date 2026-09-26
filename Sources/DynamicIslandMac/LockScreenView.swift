@@ -1,4 +1,5 @@
 import SwiftUI
+import IslandLogic
 
 struct LockScreenView: View {
     @ObservedObject var model: IslandViewModel
@@ -146,12 +147,12 @@ struct LockScreenView: View {
             .frame(height: 4)
 
             HStack {
-                Text(formatTime(model.position))
+                Text(FormatTime.playback(position: model.position, duration: model.duration).elapsed)
                     .font(.system(size: 12))
                     .foregroundStyle(palette.secondary)
                     .monospacedDigit()
                 Spacer(minLength: 0)
-                Text(model.duration > 0 ? "-\(formatTime(max(0, model.duration - model.position)))" : "LIVE")
+                Text(model.duration > 0 ? "-\(FormatTime.playback(position: model.position, duration: model.duration).remaining)" : "LIVE")
                     .font(.system(size: 12))
                     .foregroundStyle(palette.secondary)
                     .monospacedDigit()
@@ -322,9 +323,5 @@ struct LockScreenView: View {
         return CGFloat(min(1, max(0, model.position / model.duration)))
     }
 
-    private func formatTime(_ seconds: Double) -> String {
-        guard seconds.isFinite, seconds >= 0 else { return "0:00" }
-        let total = Int(seconds)
-        return String(format: "%d:%02d", total / 60, total % 60)
-    }
+    private func formatTime(_ seconds: Double) -> String { FormatTime.clock(seconds) }
 }

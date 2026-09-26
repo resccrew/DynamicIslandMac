@@ -52,6 +52,11 @@ Requires Xcode (not just the Command Line Tools) — the lock-screen overlay and
   Reminders access.
 - Collapsed content (media, timer, call, calendar) sits only in the two "ears" beside the camera notch,
   never under it; the timer and call widen the island evenly to fit.
+- A paused track keeps the island visible while its source (app or browser tab) is still open;
+  turn on «Скрывать остров на паузе» in the menu bar to hide it on pause instead.
+- External displays: pick the display in «Экран острова»; on screens without a notch the island
+  sits at the top centre.
+- «Прятать при полноэкранном режиме» hides the island while a fullscreen app is in front.
 - `LyricsProvider` — synced lyrics from the open [LRCLIB](https://lrclib.net) API
 
 ## QA / debug MCP

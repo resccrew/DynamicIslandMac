@@ -65,11 +65,21 @@ YouTube, SoundCloud, Twitch и т.д. в Chrome/Safari/Arc/Firefox/Яндекс,
 ## Известные ограничения и риски
 - Лайк трека работает только в Apple Music — Spotify не даёт scriptable "like" без OAuth Web API.
 - Нет сертификата подписи — Gatekeeper предупреждение на скачанной копии (сборка из исходников это обходит).
-- Лок-скрин оверлей и Bluetooth-детали опираются на приватные API (`SkyLightSpace`, `system_profiler`) —
-  не документированы, могут сломаться с обновлением macOS.
-- **`BluetoothDeviceInfo.run()`** (строка ~24-39): stderr `Pipe()` от `system_profiler` никогда не
-  читается — при большом выводе в stderr дочерний процесс может заблокироваться на записи, и
-  `waitUntilExit()` повиснет навсегда на background-очереди.
+- Лок-скрин оверлей опирается на приватные API (`SkyLightSpace`) — не документированы, могут
+  сломаться с обновлением macOS.
+
+## Этап 1 ревью (2026-09-26)
+Исправлено: `wasLocked` синхронизируется в обработчиках distributed-уведомлений (поллер больше не
+вызывает `screenLocked()/screenUnlocked()` повторно); тик поллера при разблокированном экране только
+читает флаг; `build_app.sh` убивает процесс через `pkill -x DynamicIslandMac`.
+Оставшиеся известные риски:
+- SkyLight приватные API вызываются через `unsafeBitCast` с угаданными сигнатурами — при изменении
+  macOS возможен краш, а не просто no-op.
+- `DebugControlServer` без auth-токена — только DEBUG-сборка и localhost, но любой локальный процесс
+  может им управлять.
+- `/tmp/island-lock.log` в DEBUG-сборке создаётся world-readable и содержит названия треков.
+- После правки `mcp/src/island_mcp/invariants.py` MCP-сервер `island` нужно перезапустить (`/mcp`),
+  иначе `check_invariants` работает по старым правилам.
 
 ## Текущий статус (на 2026-09-22)
 Полный аудит кодовой базы проведён. Общая оценка: архитектурно и по стилю выше среднего для
@@ -176,7 +186,7 @@ side-проекта — нет опасных force-unwrap, нет пустых 
 `show_glance`, `start_timer`, `toggle_lock_preview`, `get_logs`, `check_invariants`,
 `screenshot_island` (кроп вокруг панели через `screencapture -R`, burst до 20 кадров ≈ 80мс/кадр),
 `rebuild_and_relaunch` (`./build_app.sh debug`, `pkill -x DynamicIslandMac`, `open`, ждёт `/state`).
-Инварианты (`mcp/src/island_mcp/invariants.py`): `isIslandVisible == (isPlaying && title) || timer`,
+Инварианты (`mcp/src/island_mcp/invariants.py`): `isIslandVisible == (title && (isPlaying || !hideWhenPaused)) || timer || call || agenda` (agenda = nowEvent/nowReminder/pinned),
 `hasContent == title`, пауза/пусто без hover ⇒ `hidden`, glance ⇒ `state=glance`, окно по центру
 выреза и прижато к верху, форма не шире окна, idle-ширина == ширина выреза, position ≤ duration,
 индекс лирики в диапазоне.
