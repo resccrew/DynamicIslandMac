@@ -338,6 +338,22 @@ fire date раз в 0.25с (не декремент — не дрейфует), 
   (когда список «DynamicIsland QA» только создаётся) иногда возвращает ошибку — повторный вызов
   проходит (только DEBUG-хелпер, на приложение не влияет).
 
+## Внешний монитор и выбор экрана (2026-09-26)
+- Геометрия дисплеев вынесена в чистый модуль `Sources/IslandGeometry/DisplayGeometry.swift` (без AppKit)
+  + тесты `Tests/IslandGeometryTests` (XCTest, `swift test`, 16 тестов). Тесты: `swift test`.
+- Экран острова выбирает `IslandDisplay.screen` по настройке `IslandSettings.displayPolicy`:
+  `primary` (по умолчанию, экран со строкой меню = `NSScreen.screens.first`) или `builtIn`
+  (встроенный с вырезом, при закрытой крышке — основной). Старое значение "automatic" читается как `primary`.
+- **Никогда не использовать `NSScreen.main` / `panel.screen` для размещения** — `NSScreen.main` = экран
+  с активным окном и прыгает при смене фокуса.
+- На экране без выреза рисуется виртуальный вырез 190pt × высота строки меню этого экрана
+  (`frame.maxY - visibleFrame.maxY`, при 0 — `NSStatusBar.system.thickness`). В состоянии `hidden` не виден.
+- Размер выреза кэшируется в `IslandViewModel.notchSize`, обновляется только в
+  `IslandWindowController.refreshNotch` / `positionContainer`; `IslandView` читает кэш, `ScreenNotch.size()` в body не вызывать.
+- Смена конфигурации экранов: `didChangeScreenParametersNotification` → refreshNotch → переразмещение
+  (и в `LockScreenWindowController`, если оверлей показан).
+- Не проверено на железе: горячее подключение/отключение монитора, закрытие крышки, переключение политики вживую.
+
 ## Зоны ответственности агентов в этом проекте
 - **Planner** — приоритизация находок аудита, разбивка на фичи/фиксы.
 - **Implementer** — фикс регресса в `IslandViewModel`, подключение или удаление мёртвого кода

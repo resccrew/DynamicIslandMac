@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import Combine
+import IslandGeometry
 
 /// The panel is deliberately larger than the island so the shape can grow
 /// without the window resizing. That means most of it is empty space, which
@@ -51,7 +52,7 @@ final class IslandWindowController: NSWindowController {
         self.model = model
         let settings = IslandSettings.shared
         let panel = IslandPanel(
-            contentRect: NSRect(origin: .zero, size: settings.containerSize(notch: ScreenNotch.size()))
+            contentRect: NSRect(origin: .zero, size: settings.containerSize(notch: model.notchSize))
         )
         super.init(window: panel)
 
@@ -83,6 +84,18 @@ final class IslandWindowController: NSWindowController {
                 self.positionContainer()
             }
             .store(in: &cancellables)
+
+        // Plugging a monitor in or out, closing the lid, changing the main
+        // display or resolution all land here; re-place and re-measure.
+        NotificationCenter.default.publisher(for: NSApplication.didChangeScreenParametersNotification)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                // Re-measure first; the settings sink above then re-places the panel.
+                self.refreshNotch()
+                self.settings.objectWillChange.send()
+            }
+            .store(in: &cancellables)
     }
 
     @available(*, unavailable)
@@ -94,24 +107,26 @@ final class IslandWindowController: NSWindowController {
     /// shape inside changes size.
     private func positionContainer() {
         guard let panel = window else { return }
-        let screenFrame = panel.screen?.frame ?? NSScreen.main?.frame ?? .zero
-        let size = settings.containerSize(notch: ScreenNotch.size(for: panel.screen))
-        let frame = NSRect(
-            origin: NSPoint(
-                x: screenFrame.midX - size.width / 2,
-                y: screenFrame.maxY - size.height
-            ),
-            size: size
-        )
+        guard let screen = IslandDisplay.screen else { return }
+        refreshNotch(for: screen)
+        let size = settings.containerSize(notch: model.notchSize)
+        let origin = DisplayGeometry.panelOrigin(containerSize: size, on: IslandDisplay.info(for: screen))
+        let frame = NSRect(origin: origin, size: size)
         guard frame != panel.frame else { return }
         panel.setFrame(frame, display: true)
+    }
+
+    /// Updates the cached notch only when it changed, to avoid needless redraws.
+    private func refreshNotch(for screen: NSScreen? = IslandDisplay.screen) {
+        let notch = ScreenNotch.size(for: screen)
+        if model.notchSize != notch { model.notchSize = notch }
     }
 
     /// The island hugs the top edge and is centred horizontally. Window
     /// coordinates put the origin at the bottom-left, so it sits at the top.
     private func islandRectInWindow(panel: NSWindow) -> CGRect {
         let container = panel.frame.size
-        let island = model.islandSize(settings: settings, notch: ScreenNotch.size(for: panel.screen))
+        let island = model.islandSize(settings: settings, notch: model.notchSize)
         return CGRect(
             x: (container.width - island.width) / 2,
             y: container.height - island.height,

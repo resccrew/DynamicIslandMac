@@ -44,7 +44,7 @@ final class LockScreenWindowController: NSWindowController {
     init(model: IslandViewModel) {
         self.model = model
 
-        let screenFrame = NSScreen.main?.frame ?? .zero
+        let screenFrame = IslandDisplay.screen?.frame ?? .zero
         let window = LockScreenWindow(
             contentRect: screenFrame,
             styleMask: [.borderless],
@@ -126,6 +126,14 @@ final class LockScreenWindowController: NSWindowController {
             name: NSNotification.Name("com.apple.screenIsUnlocked"),
             object: nil
         )
+        // Follow the island's display when monitors change while locked.
+        NotificationCenter.default.publisher(for: NSApplication.didChangeScreenParametersNotification)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                guard let self, self.model.isLockScreenVisible else { return }
+                self.resizeToScreen()
+            }
+            .store(in: &cancellables)
     }
 
     @objc private func screenLocked() {
@@ -180,7 +188,7 @@ final class LockScreenWindowController: NSWindowController {
     }
 
     private func resizeToScreen() {
-        guard let window, let screen = NSScreen.main else { return }
+        guard let window, let screen = IslandDisplay.screen else { return }
         window.setFrame(screen.frame, display: true)
     }
 

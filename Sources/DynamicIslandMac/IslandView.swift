@@ -28,7 +28,7 @@ struct IslandView: View {
     /// Anchored to the top of a fixed-size panel, so growing downward never
     /// opens a gap against the screen edge.
     private var islandSize: CGSize {
-        model.islandSize(settings: settings, notch: ScreenNotch.size())
+        model.islandSize(settings: settings, notch: model.notchSize)
     }
 
     private var island: some View {
@@ -165,7 +165,7 @@ struct IslandView: View {
         @ViewBuilder leading: () -> Leading,
         @ViewBuilder trailing: () -> Trailing
     ) -> some View {
-        let notch = ScreenNotch.size()
+        let notch = model.notchSize
         let body = islandSize.width - settings.fillet * 2
         let ear = max(0, (body - notch.width) / 2)
         return HStack(spacing: 0) {
@@ -244,7 +244,7 @@ struct IslandView: View {
                 .buttonStyle(.plain)
             }
         }
-        .expandedCard(settings: settings)
+        .expandedCard(settings: settings, notchHeight: model.notchSize.height)
     }
 
     /// Ticks on its own, so the rest of the island isn't re-rendered every second.
@@ -333,7 +333,7 @@ struct IslandView: View {
             }
             .buttonStyle(.plain)
         }
-        .expandedCard(settings: settings)
+        .expandedCard(settings: settings, notchHeight: model.notchSize.height)
     }
 
     // MARK: - Agenda
@@ -445,7 +445,7 @@ struct IslandView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         // Rows run to the left edge; keep the last one off the rounded corner.
         .padding(.bottom, 6)
-        .expandedCard(settings: settings)
+        .expandedCard(settings: settings, notchHeight: model.notchSize.height)
     }
 
     private func isOverdue(_ reminder: AgendaReminder) -> Bool {
@@ -528,7 +528,7 @@ struct IslandView: View {
 
             progressRow
         }
-        .expandedCard(settings: settings)
+        .expandedCard(settings: settings, notchHeight: model.notchSize.height)
     }
 
     /// Elapsed, bar and remaining on one line, like the iOS player.
@@ -647,10 +647,10 @@ private struct ExpandedHeightKey: PreferenceKey {
 private extension View {
     /// Shared frame of the expanded cards: content starts just under the
     /// camera cutout, sits at the top, and reports its natural height.
-    func expandedCard(settings: IslandSettings) -> some View {
+    func expandedCard(settings: IslandSettings, notchHeight: CGFloat) -> some View {
         self
             .padding(.horizontal, settings.expandedPadding + settings.fillet)
-            .padding(.top, ScreenNotch.size().height + settings.expandedTopPadding * 0.5)
+            .padding(.top, notchHeight + settings.expandedTopPadding * 0.5)
             .padding(.bottom, settings.expandedTopPadding)
             .fixedSize(horizontal: false, vertical: true)
             .background(GeometryReader { proxy in

@@ -22,6 +22,10 @@ final class IslandViewModel: ObservableObject {
     /// Natural height of the expanded card on screen, measured by the view; the
     /// island hugs it rather than a fixed height with dead space at the bottom.
     @Published var expandedContentHeight: CGFloat?
+    /// Notch of the display hosting the island. Cached here and refreshed only
+    /// by the window controller on placement, so the view, the hit rect and the
+    /// panel frame always agree and rendering never walks `NSScreen.screens`.
+    @Published var notchSize: CGSize = ScreenNotch.size()
     /// Frames of the collapsed content's leading/trailing ears, in island
     /// coordinates; not published — only the debug server reads them.
     var collapsedContentFrames: [String: CGRect] = [:]

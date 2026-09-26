@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import IslandGeometry
 
 /// Live-tunable geometry, shared by the window controller and the view and
 /// persisted across launches. Every edit in the settings panel writes here, and
@@ -67,6 +68,9 @@ final class IslandSettings: ObservableObject {
     /// Applications brings the settings back, so it can never be stranded.
     @Published var showStatusIcon: Bool { didSet { persist() } }
 
+    /// Which display hosts the island when several are connected.
+    @Published var displayPolicy: IslandDisplayPolicy { didSet { persist() } }
+
     /// Announce headphones and the charger connecting.
 
     enum Defaults {
@@ -110,6 +114,7 @@ final class IslandSettings: ObservableObject {
         static let preventSleepOnLock = false
         static let preventSleepMinutes = 10.0
         static let showStatusIcon = true
+        static let displayPolicy = IslandDisplayPolicy.primary
     }
 
     private var isLoading = true
@@ -159,6 +164,7 @@ final class IslandSettings: ObservableObject {
             ?? Defaults.preventSleepOnLock
         preventSleepMinutes = Self.read("preventSleepMinutes", Defaults.preventSleepMinutes)
         showStatusIcon = UserDefaults.standard.object(forKey: "showStatusIcon") as? Bool ?? Defaults.showStatusIcon
+        displayPolicy = IslandDisplayPolicy(stored: UserDefaults.standard.string(forKey: "displayPolicy"))
 
         isLoading = false
     }
@@ -297,6 +303,7 @@ final class IslandSettings: ObservableObject {
         preventSleepOnLock = Defaults.preventSleepOnLock
         preventSleepMinutes = Defaults.preventSleepMinutes
         showStatusIcon = Defaults.showStatusIcon
+        displayPolicy = Defaults.displayPolicy
         isLoading = false
         persist()
     }
@@ -342,5 +349,6 @@ final class IslandSettings: ObservableObject {
         d.set(preventSleepOnLock, forKey: "preventSleepOnLock")
         d.set(preventSleepMinutes, forKey: "preventSleepMinutes")
         d.set(showStatusIcon, forKey: "showStatusIcon")
+        d.set(displayPolicy.rawValue, forKey: "displayPolicy")
     }
 }
