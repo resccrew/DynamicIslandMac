@@ -423,6 +423,7 @@ final class DebugControlServer {
             "injecting": isInjecting,
             "injectingCall": isInjectingCall,
             "content": model.content.rawValue,
+            "liveActivity": model.liveActivity.map { ["id": $0.id, "state": $0.state.rawValue] } as Any? ?? NSNull(),
             "playerBundleID": model.playerBundleID as Any? ?? NSNull(),
             "nowPlayingSource": poller?.source.rawValue ?? "none",
             "showsAppIcon": model.artwork == nil && model.displayArtwork != nil,

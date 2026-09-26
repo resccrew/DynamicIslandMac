@@ -1,0 +1,90 @@
+#!/bin/bash
+# island — show a Live Activity in DynamicIslandMac from any script.
+#
+#   island push  --id build --title "Сборка" [--subtitle s] [--symbol hammer]
+#                [--progress 0.4] [--color '#FF9500'] [--state running|success|failure]
+#                [--dismiss 5]
+#   island clear [--id build]     # no --id: clear all
+#   island list
+#
+# Talks to 127.0.0.1:47810 with the token from
+# ~/Library/Application Support/DynamicIslandMac/api-token. Needs only bash + curl.
+set -euo pipefail
+
+PORT="${ISLAND_PORT:-47810}"
+TOKEN_FILE="${ISLAND_TOKEN_FILE:-$HOME/Library/Application Support/DynamicIslandMac/api-token}"
+
+die() { echo "island: $*" >&2; exit 2; }
+
+usage() { sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+
+# JSON string literal with the escapes JSON requires.
+json_str() {
+  local s=$1 out="" c i
+  for ((i = 0; i < ${#s}; i++)); do
+    c=${s:i:1}
+    case $c in
+      '"') out+='\"' ;;
+      '\') out+='\\' ;;
+      $'\n') out+='\n' ;;
+      $'\r') out+='\r' ;;
+      $'\t') out+='\t' ;;
+      *)
+        if [[ $c < ' ' ]]; then printf -v c '\\u%04x' "'$c"; fi
+        out+=$c ;;
+    esac
+  done
+  printf '"%s"' "$out"
+}
+
+is_number() { [[ $1 =~ ^[0-9]+(\.[0-9]+)?$ ]]; }
+
+request() { # method path [body]
+  [[ -r $TOKEN_FILE ]] || die "no token at $TOKEN_FILE — is Dynamic Island running with «Разрешить внешний API» on?"
+  local token
+  token=$(tr -d '[:space:]' < "$TOKEN_FILE")
+  local args=(--silent --show-error --max-time 5 --noproxy '*' -X "$1"
+              -H @- -H 'Content-Type: application/json' -w '\n%{http_code}')
+  [[ $# -ge 3 ]] && args+=(--data-binary "$3")
+  local out code
+  # The token goes through stdin, never argv, so it doesn't show up in `ps`.
+  out=$(printf 'Authorization: Bearer %s\n' "$token" | curl "${args[@]}" "http://127.0.0.1:$PORT$2") \
+    || die "can't reach the island on 127.0.0.1:$PORT"
+  code=${out##*$'\n'}
+  out=${out%$'\n'*}
+  if [[ $code != 2* ]]; then echo "island: HTTP $code $out" >&2; exit 1; fi
+  [[ ${ISLAND_QUIET:-} == 1 ]] || echo "$out"
+}
+
+cmd=${1:-}; [[ $# -gt 0 ]] && shift
+case $cmd in
+  push)
+    fields=()
+    while [[ $# -gt 0 ]]; do
+      [[ $# -ge 2 ]] || die "$1 needs a value"
+      case $1 in
+        --id)       fields+=("\"id\":$(json_str "$2")") ;;
+        --title)    fields+=("\"title\":$(json_str "$2")") ;;
+        --subtitle) fields+=("\"subtitle\":$(json_str "$2")") ;;
+        --symbol)   fields+=("\"symbol\":$(json_str "$2")") ;;
+        --color)    fields+=("\"color\":$(json_str "$2")") ;;
+        --state)    fields+=("\"state\":$(json_str "$2")") ;;
+        --progress) is_number "$2" || die "--progress must be a number 0..1"; fields+=("\"progress\":$2") ;;
+        --dismiss)  is_number "$2" || die "--dismiss must be seconds"; fields+=("\"dismiss\":$2") ;;
+        *) die "unknown option $1" ;;
+      esac
+      shift 2
+    done
+    body=$(IFS=,; echo "{${fields[*]}}")
+    request POST /v1/activity "$body" ;;
+  clear)
+    if [[ ${1:-} == --id ]]; then
+      [[ $# -ge 2 ]] || die "--id needs a value"
+      request POST /v1/clear "{\"id\":$(json_str "$2")}"
+    else
+      request POST /v1/clear '{}'
+    fi ;;
+  list) request GET /v1/activities ;;
+  -h|--help|help) usage ;;
+  *) usage 2 >&2 ;;
+esac

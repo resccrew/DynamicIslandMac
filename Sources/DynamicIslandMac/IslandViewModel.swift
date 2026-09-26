@@ -52,6 +52,7 @@ final class IslandViewModel: ObservableObject {
         case glance
         case call
         case agenda
+        case activity
         case timer
         case media
         case none
@@ -61,9 +62,21 @@ final class IslandViewModel: ObservableObject {
         if glanceTitle != nil { return .glance }
         if call != nil { return .call }
         if isAgendaNow || isAgendaPinned { return .agenda }
+        if liveActivity != nil { return .activity }
         if isTimerActive { return .timer }
         if showsMedia { return .media }
         return .none
+    }
+
+    // MARK: - Live Activity
+
+    /// The activity a script pushed through `LiveActivityServer`, if any.
+    @Published private(set) var liveActivity: LiveActivity?
+
+    func setLiveActivity(_ activity: LiveActivity?) {
+        guard activity != liveActivity else { return }
+        liveActivity = activity
+        sync()
     }
 
     // MARK: - Call
@@ -346,7 +359,7 @@ final class IslandViewModel: ObservableObject {
             isPlaying: isPlaying,
             hasTrack: hasContent,
             hideWhenPaused: IslandSettings.shared.hideWhenPaused
-        ) || isTimerActive || call != nil || isAgendaNow || isAgendaPinned
+        ) || isTimerActive || call != nil || isAgendaNow || isAgendaPinned || liveActivity != nil
     }
 
     /// The track fills the island: while playing, and — paused — while the
@@ -615,7 +628,7 @@ extension IslandViewModel {
             // A countdown or call duration is wider than the ear beside the
             // camera at the media width; widen both ears evenly rather than
             // let it slide under the notch.
-            guard content == .timer || content == .call || content == .agenda else { return size }
+            guard content == .timer || content == .call || content == .agenda || content == .activity else { return size }
             let wide = settings.wideEarsWidth(notch: notch, peek: state == .peek)
             return CGSize(width: max(size.width, wide), height: size.height)
         default:

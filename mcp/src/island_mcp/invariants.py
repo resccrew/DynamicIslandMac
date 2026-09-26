@@ -30,12 +30,14 @@ def _visibility(s: dict[str, Any]) -> list[str]:
     timer = s.get("timerRemaining") is not None
     call = s.get("call") is not None
     agenda = _agenda_active(s)
+    activity = s.get("liveActivity") is not None
     media = title != "" and (bool(s.get("isPlaying")) or not hide_paused)
-    expected_visible = media or timer or call or agenda
+    expected_visible = media or timer or call or agenda or activity
     if s.get("isIslandVisible") != expected_visible:
         out.append(
             f"isIslandVisible={s.get('isIslandVisible')} but expected {expected_visible} "
-            f"(isPlaying={s.get('isPlaying')}, title set={title != ''}, timer={timer}, call={call}, agenda={agenda})"
+            f"(isPlaying={s.get('isPlaying')}, title set={title != ''}, timer={timer}, call={call}, agenda={agenda}, "
+            f"activity={activity})"
         )
     if s.get("hasContent") != (title != ""):
         out.append(f"hasContent={s.get('hasContent')} but title is {'set' if title else 'empty'}")
@@ -43,7 +45,10 @@ def _visibility(s: dict[str, Any]) -> list[str]:
 
 
 def _content(s: dict[str, Any]) -> list[str]:
-    """The island body follows a fixed priority: glance > call > agenda > timer > media."""
+    """The island body follows a fixed priority: glance > call > agenda > activity > timer > media.
+
+    A Live Activity (pushed by a script) sits under agenda: the menu-opened
+    agenda card is an explicit click and must not be hijacked by a build."""
     content = s.get("content")
     if content is None:
         return []
@@ -53,6 +58,8 @@ def _content(s: dict[str, Any]) -> list[str]:
         expected = "call"
     elif _agenda_active(s):
         expected = "agenda"
+    elif s.get("liveActivity") is not None:
+        expected = "activity"
     elif s.get("timerRemaining") is not None:
         expected = "timer"
     elif s.get("title") and (s.get("isPlaying") or not _hide_when_paused(s)):
@@ -62,7 +69,7 @@ def _content(s: dict[str, Any]) -> list[str]:
         # (expanded) or a hovered one (peek). Closed, it shows nothing.
         expected = "media" if s.get("state") in ("expanded", "peek") and s.get("hasContent") else "none"
     if content != expected:
-        return [f"content={content} but priority glance>call>agenda>timer>media says {expected}"]
+        return [f"content={content} but priority glance>call>agenda>timer>media (activity sits between agenda and timer) says {expected}"]
     return []
 
 

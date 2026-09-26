@@ -388,6 +388,28 @@ fire date раз в 0.25с (не декремент — не дрейфует), 
   команды идут в показанный плеер.
 - Тесты: `swift test` — 34 (21 geometry + 13 logic); MCP: `uv run pytest` в `mcp/` — 49.
 
+## Live Activity API (2026-09-26, ветка feat/live-activity-api)
+Скрипты/CI/агенты показывают в острове свою активность (`tools/island` → HTTP). Файлы:
+- `Sources/IslandLogic/LiveActivity.swift` — валидация payload (`LiveActivityPayload`, Result-типы),
+  `LiveActivityStore` (merge апдейтов, лимит 5, dismiss/stale-правила, выбор показываемой).
+- `Sources/IslandLogic/LiveActivityHTTP.swift` — парсер HTTP (лимит тела/заголовков, запрет
+  `Transfer-Encoding` и дублей заголовков) и `authorize`: отказ при любом `Origin`, `Host` только loopback,
+  Bearer-токен сравнивается за константное время. Тесты: `Tests/IslandLogicTests/LiveActivityTests.swift` (21).
+- `Sources/DynamicIslandMac/LiveActivityServer.swift` — NWListener на 127.0.0.1:47810 в RELEASE, main-очередь,
+  ≤16 соединений, таймаут чтения 5с; токен `~/Library/Application Support/DynamicIslandMac/api-token`
+  (0600, каталог 0700, 32 байта `SecRandomCopyBytes`). Таймер dismiss перевзводится на `nextExpiry`.
+- `LiveActivityView.swift` — части UI; сам `IslandView` кладёт их в `earsRow` (свёрнуто, широкие уши,
+  на экране без выреза высота = строка меню через тот же `collapsedIslandSize`) и в `expandedCard`.
+- Настройка `IslandSettings.allowExternalAPI` (по умолчанию вкл.: только loopback + токен 0600),
+  секция «Внешний API» в настройках; выключение останавливает сервер и убирает активности.
+- **Приоритет: glance > call > agenda > activity > timer > media.** Activity ниже agenda, потому что
+  pinned-agenda (клик «Сегодня» в меню) форсит `.expanded` в `sync()` — иначе билд перехватил бы
+  карточку, которую пользователь явно открыл; «сейчас»-событие короткое. Выше таймера — активность
+  пушится явно и обычно короче. `/state.liveActivity` → инварианты MCP `_visibility`/`_content`.
+- Выбор при нескольких: только что завершённая (последняя по finish) → иначе running, начатая последней
+  (по старту, не по апдейту — прогресс двух джобов не дёргает остров).
+- Завершённая уходит через `dismiss` (по умолчанию 8с); running без апдейтов 15 мин — удаляется (упавший скрипт).
+
 ## Зоны ответственности агентов в этом проекте
 - **Planner** — приоритизация находок аудита, разбивка на фичи/фиксы.
 - **Implementer** — фикс регресса в `IslandViewModel`, подключение или удаление мёртвого кода
