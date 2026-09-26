@@ -74,6 +74,8 @@ final class IslandSettings: ObservableObject {
 
     /// Get out of the way of fullscreen video and apps on the island's display.
     @Published var hideInFullScreen: Bool { didSet { persist() } }
+    /// Local Live Activity API for scripts (`LiveActivityServer`).
+    @Published var allowExternalAPI: Bool { didSet { persist() } }
 
     /// Which display hosts the island when several are connected.
     @Published var displayPolicy: IslandDisplayPolicy { didSet { persist() } }
@@ -123,6 +125,7 @@ final class IslandSettings: ObservableObject {
         static let showStatusIcon = true
         static let hideWhenPaused = false
         static let hideInFullScreen = true
+        static let allowExternalAPI = true
         static let displayPolicy = IslandDisplayPolicy.primary
     }
 
@@ -176,6 +179,8 @@ final class IslandSettings: ObservableObject {
         hideWhenPaused = UserDefaults.standard.object(forKey: "hideWhenPaused") as? Bool ?? Defaults.hideWhenPaused
         hideInFullScreen = UserDefaults.standard.object(forKey: "hideInFullScreen") as? Bool
             ?? Defaults.hideInFullScreen
+        allowExternalAPI = UserDefaults.standard.object(forKey: "allowExternalAPI") as? Bool
+            ?? Defaults.allowExternalAPI
         displayPolicy = IslandDisplayPolicy(stored: UserDefaults.standard.string(forKey: "displayPolicy"))
 
         isLoading = false
@@ -340,6 +345,7 @@ final class IslandSettings: ObservableObject {
         showStatusIcon = Defaults.showStatusIcon
         hideWhenPaused = Defaults.hideWhenPaused
         hideInFullScreen = Defaults.hideInFullScreen
+        allowExternalAPI = Defaults.allowExternalAPI
         displayPolicy = Defaults.displayPolicy
         isLoading = false
         persist()
@@ -388,6 +394,7 @@ final class IslandSettings: ObservableObject {
         d.set(showStatusIcon, forKey: "showStatusIcon")
         d.set(hideWhenPaused, forKey: "hideWhenPaused")
         d.set(hideInFullScreen, forKey: "hideInFullScreen")
+        d.set(allowExternalAPI, forKey: "allowExternalAPI")
         d.set(displayPolicy.rawValue, forKey: "displayPolicy")
     }
 }

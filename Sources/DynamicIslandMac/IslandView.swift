@@ -70,6 +70,15 @@ struct IslandView: View {
                     agendaCollapsedContent
                         .transition(.opacity)
                 }
+            } else if let activity = model.liveActivity {
+                if model.isExpanded {
+                    LiveActivityExpanded(activity: activity)
+                        .expandedCard(settings: settings, notchHeight: model.notchSize.height)
+                        .transition(.opacity)
+                } else {
+                    earsRow { LiveActivityLeading(activity: activity) } trailing: { LiveActivityTrailing(activity: activity) }
+                        .transition(.opacity)
+                }
             } else if model.isTimerActive {
                 if model.isExpanded {
                     timerExpandedContent

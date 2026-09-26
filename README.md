@@ -59,6 +59,38 @@ Requires Xcode (not just the Command Line Tools) — the lock-screen overlay and
 - «Прятать при полноэкранном режиме» hides the island while a fullscreen app is in front.
 - `LyricsProvider` — synced lyrics from the open [LRCLIB](https://lrclib.net) API
 
+## Live Activity API (scripts, CI, agents)
+
+Any local script can show its own activity in the island: title, subtitle, SF Symbol,
+progress (0…1 or indeterminate), accent colour, state (`running`/`success`/`failure`) and
+auto-dismiss after it finishes.
+
+Install the CLI (bash + curl, nothing else):
+
+```sh
+ln -s "$PWD/tools/island" /usr/local/bin/island   # or copy it anywhere on $PATH
+```
+
+```sh
+island push --id build --title "Сборка" --progress 0.4 --symbol hammer
+island push --id build --state success --dismiss 5     # omitted fields keep their value
+island push --id tests --title "Тесты" --color '#FF9500'  # no --progress = spinner
+island clear --id build        # or `island clear` for all
+island list
+```
+
+- Server: `127.0.0.1:47810` only, in release builds too. Toggle: Settings → «Внешний API» (on by default).
+- Auth: `Authorization: Bearer <token>`; the token is generated on first launch in
+  `~/Library/Application Support/DynamicIslandMac/api-token` (mode 600). The CLI passes it via stdin, not argv.
+- Refused: any request with an `Origin` header (web pages), a non-loopback `Host` (DNS rebinding),
+  bodies over 4 KB, more than 5 activities at once.
+- A finished activity goes after `--dismiss` seconds (default 8); a running one nobody updates for 15 min is dropped.
+- Several at once: a just-finished one is shown first, otherwise the running one started last.
+- Island priority: glance > call > agenda > **activity** > timer > media.
+
+Raw HTTP: `POST /v1/activity` `{"id","title","subtitle","symbol","progress","color":"#RRGGBB","state","dismiss"}`,
+`POST /v1/clear` `{"id"}` (or `{}`), `GET /v1/activities`.
+
 ## QA / debug MCP
 
 Debug builds (`./build_app.sh debug`) start a local control server on `127.0.0.1:47800`
