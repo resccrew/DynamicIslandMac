@@ -29,25 +29,46 @@ enum AppleScriptNowPlaying {
 
     /// Both players are asked; a playing one beats a paused one, so a paused
     /// Spotify no longer hides Music that is actually playing.
-    static func fetch() -> Info? {
+    private static func fetch() -> Info? {
         let candidates = [fetchSpotify(), fetchMusic()].compactMap { $0 }
         let shown = candidates.first(where: \.isPlaying) ?? candidates.first
-        activeSource = shown?.source
+        state.withLock { $0.activeSource = shown?.source }
         return shown
     }
 
-    /// The player last shown, so commands go to it rather than to whichever
-    /// app happens to be running. Confined to `queue`, like every call here.
-    private static var activeSource: Source?
+    /// Shared between the poll and command queues, so behind a lock.
+    private struct State {
+        /// The player last shown, so commands go to it rather than to
+        /// whichever app happens to be running.
+        var activeSource: Source?
+        /// A poll is still waiting on a player; the next tick is skipped
+        /// instead of piling up behind a hung Apple Event.
+        var fetchInFlight = false
+    }
+    private static let state = Locked(State())
 
-    /// Every AppleScript call — polling and commands alike — runs here. It keeps
-    /// the work off the main thread (Apple Events to Spotify take long enough to
-    /// stall a tap) and gives the compiled-script cache a single owner.
-    private static let queue = DispatchQueue(label: "AppleScriptNowPlaying")
+    /// Polling runs here, off the main thread (Apple Events to Spotify take
+    /// long enough to stall a tap).
+    private static let pollQueue = DispatchQueue(label: "AppleScriptNowPlaying.poll")
+    /// Commands get their own queue so a tap never waits behind a slow poll.
+    private static let commandQueue = DispatchQueue(label: "AppleScriptNowPlaying.command")
 
-    /// Async entry point for the poller, so callers never touch the queue directly.
-    static func fetch(completion: @escaping (Info?) -> Void) {
-        queue.async { completion(fetch()) }
+    /// Async entry point for the poller. Returns false (and never calls
+    /// `completion`) while the previous fetch is still running.
+    @discardableResult
+    static func fetch(completion: @escaping (Info?) -> Void) -> Bool {
+        let started = state.withLock { state -> Bool in
+            guard !state.fetchInFlight else { return false }
+            state.fetchInFlight = true
+            return true
+        }
+        guard started else { return false }
+        pollQueue.async {
+            let info = fetch()
+            state.withLock { $0.fetchInFlight = false }
+            completion(info)
+        }
+        return true
     }
 
     static func playPause() { run(spotify: "playpause", music: "playpause") }
@@ -55,9 +76,9 @@ enum AppleScriptNowPlaying {
     static func previous() { run(spotify: "previous track", music: "previous track") }
 
     private static func run(spotify spotifyCmd: String, music musicCmd: String) {
-        queue.async {
+        commandQueue.async {
             let script: String
-            switch activeSource {
+            switch state.withLock({ $0.activeSource }) {
             case .spotify:
                 script = "tell application \"Spotify\" to \(spotifyCmd)"
             case .music:
@@ -71,13 +92,14 @@ enum AppleScriptNowPlaying {
                 end if
                 """
             }
-            _ = runAppleScript(script)
+            _ = runAppleScript(script, cache: &commandScripts)
         }
     }
 
     private static func fetchSpotify() -> Info? {
         let script = """
         if application "Spotify" is running then
+            with timeout of \(eventTimeout) seconds
             tell application "Spotify"
                 set playerState to player state as string
                 if playerState is "playing" or playerState is "paused" then
@@ -89,10 +111,11 @@ enum AppleScriptNowPlaying {
                     return trackName & "||" & trackArtist & "||" & playerState & "||" & artworkURL & "||" & posSec & "||" & durMs
                 end if
             end tell
+            end timeout
         end if
         return ""
         """
-        guard let result = runAppleScript(script), !result.isEmpty else { return nil }
+        guard let result = runAppleScript(script, cache: &pollScripts), !result.isEmpty else { return nil }
         let parts = result.components(separatedBy: "||")
         guard parts.count >= 6 else { return nil }
 
@@ -110,6 +133,7 @@ enum AppleScriptNowPlaying {
     private static func fetchMusic() -> Info? {
         let script = """
         if application "Music" is running then
+            with timeout of \(eventTimeout) seconds
             tell application "Music"
                 if player state is playing or player state is paused then
                     set trackName to name of current track
@@ -120,10 +144,11 @@ enum AppleScriptNowPlaying {
                     return trackName & "||" & trackArtist & "||" & stateStr & "||" & posSec & "||" & durSec
                 end if
             end tell
+            end timeout
         end if
         return ""
         """
-        guard let result = runAppleScript(script), !result.isEmpty else { return nil }
+        guard let result = runAppleScript(script, cache: &pollScripts), !result.isEmpty else { return nil }
         let parts = result.components(separatedBy: "||")
         guard parts.count >= 5 else { return nil }
         return Info(
@@ -137,32 +162,50 @@ enum AppleScriptNowPlaying {
         )
     }
 
+    /// A hung player gives up after this many seconds instead of the
+    /// default two minutes.
+    private static let eventTimeout = 2
+
     /// Compiled scripts are cached and reused.
     ///
     /// `NSAppleScript(source:)` compiles on creation, and building a fresh one
     /// for every poll — once a second, forever — was the single biggest drain in
     /// the app. Compiling once and re-executing costs a fraction of that.
     ///
-    /// `NSAppleScript` is not thread-safe, so the cache and every execution are
-    /// confined to one serial queue.
-    private static var compiledScripts: [String: NSAppleScript] = [:]
+    /// `NSAppleScript` is not thread-safe, so each cache and every script in it
+    /// is confined to one serial queue: `pollScripts` to `pollQueue`,
+    /// `commandScripts` to `commandQueue`.
+    private static var pollScripts: [String: NSAppleScript] = [:]
+    private static var commandScripts: [String: NSAppleScript] = [:]
 
     @discardableResult
-    private static func runAppleScript(_ source: String) -> String? {
+    private static func runAppleScript(_ source: String, cache: inout [String: NSAppleScript]) -> String? {
         let script: NSAppleScript
-        if let cached = compiledScripts[source] {
+        if let cached = cache[source] {
             script = cached
         } else {
             guard let created = NSAppleScript(source: source) else { return nil }
-            compiledScripts[source] = created
+            cache[source] = created
             script = created
         }
 
         var error: NSDictionary?
         let result = script.executeAndReturnError(&error)
-        if error != nil {
-            return nil
-        }
+        guard error == nil else { return nil }
         return result.stringValue
+    }
+}
+
+/// A value behind a lock, for state shared between queues.
+final class Locked<Value> {
+    private var value: Value
+    private let lock = NSLock()
+
+    init(_ value: Value) { self.value = value }
+
+    func withLock<T>(_ body: (inout Value) -> T) -> T {
+        lock.lock()
+        defer { lock.unlock() }
+        return body(&value)
     }
 }
