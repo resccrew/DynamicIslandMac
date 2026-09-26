@@ -132,6 +132,12 @@ struct SettingsView: View {
                 hint("Наведение — лёгкий подрост с вибрацией, клик — полное раскрытие.")
             }
 
+            section("Пауза") {
+                Toggle("Скрывать остров на паузе", isOn: $settings.hideWhenPaused)
+                    .font(.system(size: 12))
+                hint("Выключено — остров на паузе остаётся, пока открыт источник (вкладка или приложение).")
+            }
+
             section("Экран острова") {
                 Picker("Экран острова", selection: $settings.displayPolicy) {
                     Text("Основной (экран со строкой меню)").tag(IslandDisplayPolicy.primary)

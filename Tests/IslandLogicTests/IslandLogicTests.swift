@@ -4,31 +4,58 @@ import XCTest
 final class IslandVisibilityTests: XCTestCase {
     func testPausedWhileOpenStays() {
         // Expanded (click-opened) and hover (peek) both count as open.
-        XCTAssertTrue(IslandVisibility.showsMedia(isPlaying: false, hasTrack: true, isOpen: true))
+        XCTAssertTrue(IslandVisibility.showsMedia(isPlaying: false, hasTrack: true, isOpen: true, hideWhenPaused: true))
     }
 
     func testPausedAndClosedHides() {
-        XCTAssertFalse(IslandVisibility.showsMedia(isPlaying: false, hasTrack: true, isOpen: false))
+        XCTAssertFalse(IslandVisibility.showsMedia(isPlaying: false, hasTrack: true, isOpen: false, hideWhenPaused: true))
     }
 
     func testPlayingShows() {
-        XCTAssertTrue(IslandVisibility.showsMedia(isPlaying: true, hasTrack: true, isOpen: false))
+        XCTAssertTrue(IslandVisibility.showsMedia(isPlaying: true, hasTrack: true, isOpen: false, hideWhenPaused: true))
     }
 
     func testPausedHoveredRowIsRenderedAndOpaque() {
-        let media = IslandVisibility.showsMedia(isPlaying: false, hasTrack: true, isOpen: true)
+        let media = IslandVisibility.showsMedia(isPlaying: false, hasTrack: true, isOpen: true, hideWhenPaused: true)
         XCTAssertTrue(IslandVisibility.rendersCollapsedContent(isIslandVisible: false, showsMedia: media))
         XCTAssertEqual(IslandVisibility.opacity(isHidden: false), 1)
     }
 
     func testPausedClosedRowIsNotRenderedAndFades() {
-        let media = IslandVisibility.showsMedia(isPlaying: false, hasTrack: true, isOpen: false)
+        let media = IslandVisibility.showsMedia(isPlaying: false, hasTrack: true, isOpen: false, hideWhenPaused: true)
         XCTAssertFalse(IslandVisibility.rendersCollapsedContent(isIslandVisible: false, showsMedia: media))
         XCTAssertEqual(IslandVisibility.opacity(isHidden: true), 0)
     }
 
     func testNoTrackNeverShowsMedia() {
-        XCTAssertFalse(IslandVisibility.showsMedia(isPlaying: true, hasTrack: false, isOpen: true))
+        XCTAssertFalse(IslandVisibility.showsMedia(isPlaying: true, hasTrack: false, isOpen: true, hideWhenPaused: false))
+    }
+}
+
+final class PausedIslandStaysTests: XCTestCase {
+    func testPausedWithSourcePresentStaysVisibleByDefault() {
+        XCTAssertTrue(IslandVisibility.mediaVisible(isPlaying: false, hasTrack: true, hideWhenPaused: false))
+        XCTAssertTrue(IslandVisibility.showsMedia(isPlaying: false, hasTrack: true, isOpen: false, hideWhenPaused: false))
+        XCTAssertTrue(IslandVisibility.rendersCollapsedContent(isIslandVisible: true, showsMedia: true))
+    }
+
+    func testHideWhenPausedRestoresOldRules() {
+        XCTAssertFalse(IslandVisibility.mediaVisible(isPlaying: false, hasTrack: true, hideWhenPaused: true))
+        XCTAssertFalse(IslandVisibility.showsMedia(isPlaying: false, hasTrack: true, isOpen: false, hideWhenPaused: true))
+        XCTAssertTrue(IslandVisibility.showsMedia(isPlaying: false, hasTrack: true, isOpen: true, hideWhenPaused: true))
+    }
+
+    func testSourceGoneHides() {
+        for hide in [false, true] {
+            XCTAssertFalse(IslandVisibility.mediaVisible(isPlaying: false, hasTrack: false, hideWhenPaused: hide))
+            XCTAssertFalse(IslandVisibility.showsMedia(isPlaying: false, hasTrack: false, isOpen: false, hideWhenPaused: hide))
+        }
+    }
+
+    func testPlayingIsVisible() {
+        for hide in [false, true] {
+            XCTAssertTrue(IslandVisibility.mediaVisible(isPlaying: true, hasTrack: true, hideWhenPaused: hide))
+        }
     }
 }
 

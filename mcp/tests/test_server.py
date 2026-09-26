@@ -373,3 +373,33 @@ def test_agenda_tools_forward_to_app(app):
     server.press_glance_action()
     assert app.requests[-1][:2] == ("POST", "/simulate/glance-action")
 
+
+
+# --- paused island stays (hideWhenPaused off, the app default) ---
+
+def paused_stays_state(**extra):
+    s = playing_state()
+    s["settings"] = {"hideWhenPaused": False}
+    s.update(isPlaying=False, content="media")
+    s.update(extra)
+    return s
+
+
+def test_paused_track_stays_visible_when_hide_off():
+    s = paused_stays_state()
+    assert invariants.check(s) == []
+    s.update(isIslandVisible=False, state="hidden", content="none")
+    violations = invariants.check(s)
+    assert any("isIslandVisible" in v for v in violations)
+
+
+def test_paused_source_gone_hides_when_hide_off():
+    s = paused_stays_state(title="", hasContent=False, isIslandVisible=False, state="hidden", content="none")
+    s["islandShapeRect"] = dict(BASE_STATE["islandShapeRect"])
+    assert invariants.check(s) == []
+
+
+def test_missing_setting_defaults_to_stay_visible():
+    s = paused_stays_state()
+    del s["settings"]
+    assert invariants.check(s) == []

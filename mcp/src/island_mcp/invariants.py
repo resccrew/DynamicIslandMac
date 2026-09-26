@@ -18,13 +18,20 @@ def _agenda_active(s: dict[str, Any]) -> bool:
     return agenda.get("nowEvent") is not None or agenda.get("nowReminder") is not None or bool(agenda.get("pinned"))
 
 
+def _hide_when_paused(s: dict[str, Any]) -> bool:
+    """App setting; default off: a paused track stays while its source is open."""
+    return bool((s.get("settings") or {}).get("hideWhenPaused", False))
+
+
 def _visibility(s: dict[str, Any]) -> list[str]:
     out = []
     title = s.get("title") or ""
+    hide_paused = _hide_when_paused(s)
     timer = s.get("timerRemaining") is not None
     call = s.get("call") is not None
     agenda = _agenda_active(s)
-    expected_visible = (bool(s.get("isPlaying")) and title != "") or timer or call or agenda
+    media = title != "" and (bool(s.get("isPlaying")) or not hide_paused)
+    expected_visible = media or timer or call or agenda
     if s.get("isIslandVisible") != expected_visible:
         out.append(
             f"isIslandVisible={s.get('isIslandVisible')} but expected {expected_visible} "
@@ -48,7 +55,7 @@ def _content(s: dict[str, Any]) -> list[str]:
         expected = "agenda"
     elif s.get("timerRemaining") is not None:
         expected = "timer"
-    elif s.get("isPlaying") and s.get("title"):
+    elif s.get("title") and (s.get("isPlaying") or not _hide_when_paused(s)):
         expected = "media"
     else:
         # A paused track still fills an open island: a click-opened card

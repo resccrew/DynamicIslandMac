@@ -30,11 +30,21 @@ YouTube, SoundCloud, Twitch и т.д. в Chrome/Safari/Arc/Firefox/Яндекс,
   или умер 3 раза подряд. Команды play/pause/next/prev идут в активный источник через `model.player`.
 
 ### Ключевое договорённое решение (важно не сломать повторно)
-`hasContent` (лок-скрин, показывает паузу — как в iOS) и `isIslandVisible` (плавающий остров,
-должен скрываться при паузе) — сознательно **разные** свойства в `IslandViewModel`. Причина:
-Spotify AppleScript не имеет настоящего "stopped" — `stop` — это просто `pause`, и трек репортит
-title бесконечно после паузы. Если `isIslandVisible` смотрит только на `!title.isEmpty` без
-`isPlaying`, остров торчит из выреза до перезапуска Spotify. См. `IslandViewModel.swift:84-90`.
+`hasContent` (трек загружен) и `isIslandVisible` (плавающий остров виден) — **разные** свойства в
+`IslandViewModel`, правило видимости — чистая функция `IslandVisibility.mediaVisible` (модуль `IslandLogic`).
+
+- **По умолчанию (с 2026-09, `hideWhenPaused = false`) остров на паузе остаётся видимым**, пока источник
+  (вкладка/приложение) ещё открыт и отдаёт трек: `isIslandVisible = hasContent && (isPlaying || !hideWhenPaused)`.
+  Пауза показывается приглушёнными «точками» эквалайзера. Скрывается остров, только когда источник исчез:
+  системный Now Playing прислал пустой payload / пустую запись без title+artist+album на паузе
+  (`NowPlayingPoller.emitSystem`), AppleScript-плеер не запущен/остановлен, или title пуст.
+- Раньше `isIslandVisible` требовал `isPlaying`: Spotify по AppleScript отдаёт title бесконечно после паузы, и
+  остров «торчал». Теперь это *желаемое* поведение («пока окно открыто»). Старое поведение доступно
+  настройкой «Скрывать остров на паузе» (`IslandSettings.hideWhenPaused`, раздел «Поведение»):
+  тогда пауза прячет остров, кроме открытого/наведённого (`showsMedia`), и после ухода курсора он гаснет.
+- Выбор источника: `NowPlayingArbiter` — играющий бьёт стоящий на паузе, среди играющих побеждает последний
+  начавший; источник на паузе не отбирает остров у играющего (grace 3с для system-стрима).
+- Инвариант MCP (`mcp/src/island_mcp/invariants.py`) повторяет правило и читает `settings.hideWhenPaused` из `/state`.
 
 ## Правила кодирования проекта
 - `[weak self]` в замыканиях, таймерах, NotificationCenter-подписках, где self может пережить подписку.

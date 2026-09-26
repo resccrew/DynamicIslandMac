@@ -81,6 +81,7 @@ final class IslandWindowController: NSWindowController {
             .sink { [weak self] in
                 guard let self else { return }
                 self.window?.hasShadow = self.settings.showShadow
+                self.model.settingsChanged()
                 self.positionContainer()
             }
             .store(in: &cancellables)
