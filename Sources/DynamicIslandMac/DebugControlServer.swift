@@ -370,7 +370,7 @@ final class DebugControlServer {
     // MARK: - State
 
     private func state() -> [String: Any] {
-        let screen = islandController?.window?.screen ?? NSScreen.main
+        let screen = IslandDisplay.screen
         let screenFrame = screen?.frame ?? .zero
         let notch = ScreenNotch.size(for: screen)
         let notchRect = CGRect(
@@ -381,7 +381,7 @@ final class DebugControlServer {
         )
         let settings = IslandSettings.shared
         var result: [String: Any] = [
-            "coordinates": "top-left origin, points, main display",
+            "coordinates": "top-left origin, points, island display",
             "state": "\(model.state)",
             "isIslandVisible": model.isIslandVisible,
             "hasContent": model.hasContent,

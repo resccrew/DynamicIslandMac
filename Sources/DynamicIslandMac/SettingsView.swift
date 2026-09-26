@@ -1,4 +1,5 @@
 import SwiftUI
+import IslandGeometry
 
 struct SettingsView: View {
     @ObservedObject var settings: IslandSettings
@@ -129,6 +130,15 @@ struct SettingsView: View {
                 slider("Подрост по высоте", $settings.peekHeightGrowth, 0...30)
                 slider("Скорость анимации", $settings.animationDuration, 0.12...0.7, decimals: 2)
                 hint("Наведение — лёгкий подрост с вибрацией, клик — полное раскрытие.")
+            }
+
+            section("Экран острова") {
+                Picker("Экран острова", selection: $settings.displayPolicy) {
+                    Text("Основной (экран со строкой меню)").tag(IslandDisplayPolicy.primary)
+                    Text("Встроенный с вырезом").tag(IslandDisplayPolicy.builtIn)
+                }
+                .font(.system(size: 12))
+                hint("«Встроенный» без встроенного экрана (крышка закрыта) — как «Основной». Без выреза остров рисует свой, высотой со строку меню.")
             }
 
             section("Оформление окна") {
