@@ -268,7 +268,7 @@ final class IslandViewModel: ObservableObject {
     @Published private(set) var glanceTitle: String?
     @Published private(set) var glanceSubtitle: String?
     /// SF Symbol for the glance, so a finished timer does not wear a calendar.
-    @Published private(set) var glanceSymbol = "calendar"
+    @Published private(set) var glanceSymbol = "bell.fill"
     /// Optional button on the glance («Подключиться», «Выполнено»).
     @Published private(set) var glanceAction: GlanceAction?
     private var glanceTimer: Timer?
@@ -276,7 +276,7 @@ final class IslandViewModel: ObservableObject {
     func presentGlance(
         title: String,
         subtitle: String?,
-        symbol: String = "calendar",
+        symbol: String = "bell.fill",
         action: GlanceAction? = nil
     ) {
         glanceTimer?.invalidate()
@@ -624,13 +624,6 @@ extension IslandViewModel {
         case .expanded:
             guard glanceTitle == nil, let height = expandedContentHeight else { return size }
             return CGSize(width: size.width, height: height)
-        case .collapsed, .peek:
-            // A countdown or call duration is wider than the ear beside the
-            // camera at the media width; widen both ears evenly rather than
-            // let it slide under the notch.
-            guard content == .timer || content == .call || content == .agenda || content == .activity else { return size }
-            let wide = settings.wideEarsWidth(notch: notch, peek: state == .peek)
-            return CGSize(width: max(size.width, wide), height: size.height)
         default:
             return size
         }

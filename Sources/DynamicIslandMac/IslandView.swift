@@ -5,6 +5,7 @@ import IslandLogic
 struct IslandView: View {
     @ObservedObject var model: IslandViewModel
     @ObservedObject var settings: IslandSettings
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(spacing: 0) {
@@ -17,14 +18,14 @@ struct IslandView: View {
                 // curve — independent of that spring — makes it read as the
                 // island dissolving instead of the shape just shrinking.
                 .opacity(IslandVisibility.opacity(isHidden: model.state == .hidden))
-                .animation(.easeOut(duration: 0.35), value: model.state == .hidden)
+                .animation(.dsFade(reduceMotion: reduceMotion), value: model.state == .hidden)
                 .onHover { hovering in
                     model.hover(hovering)
                 }
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .animation(openAnimation, value: model.state)
+        .animation(stateAnimation, value: model.state)
     }
 
     /// Anchored to the top of a fixed-size panel, so growing downward never
@@ -73,7 +74,7 @@ struct IslandView: View {
             } else if let activity = model.liveActivity {
                 if model.isExpanded {
                     LiveActivityExpanded(activity: activity)
-                        .expandedCard(settings: settings, notchHeight: model.notchSize.height)
+                        .expandedCard(notchHeight: model.notchSize.height)
                         .transition(.opacity)
                 } else {
                     earsRow { LiveActivityLeading(activity: activity) } trailing: { LiveActivityTrailing(activity: activity) }
@@ -122,95 +123,99 @@ struct IslandView: View {
         .drawingGroup()
     }
 
-    /// Fast and smooth: a short, well-damped spring so it settles without
-    /// overshoot ringing. Duration is tunable from the settings panel.
-    private var openAnimation: Animation {
-        .spring(response: settings.animationDuration, dampingFraction: 0.86)
+    /// Every state change: the design system's `state` spring, at the speed
+    /// chosen in the settings, softened to a fade under Reduce Motion.
+    private var stateAnimation: Animation {
+        .ds(.spring(response: settings.animationDuration, damping: DS.Motion.stateDamping), reduceMotion: reduceMotion)
     }
 
     /// Hangs from the top edge of the display and blends into it, the way the
-    /// hardware notch does.
+    /// hardware notch does. One squircle exponent for every state.
     private var shape: NotchShape {
-        // Idle also needs its own, much tighter corner: the real notch's
-        // bottom corners are far less rounded than the collapsed pill's,
-        // and reusing collapsedBottomRadius there leaves the actual
-        // hardware notch peeking out past our softer curve.
-        let bottomRadius: CGFloat = model.isExpanded
-            ? settings.expandedBottomRadius
-            : model.state == .hidden
-                ? settings.idleBottomRadius
-                : settings.collapsedBottomRadius
-
-        return NotchShape(
+        NotchShape(
             // Same concave flare on every visible state, expanded included —
             // the card grows out of the screen edge the way the collapsed
-            // pill already does, instead of reading as a separate floating
-            // box with its own rounded top.
+            // pill already does, instead of reading as a separate floating box.
             topFillet: model.state == .hidden ? 0 : settings.fillet,
             bottomRadius: bottomRadius,
-            // The squircle exponent tuned for the collapsed pill's large
-            // radius reads as an almost-square chamfer at idle's tiny
-            // radius. When expanded, we use a perfectly circular exponent (2.2)
-            // on ALL corners so it looks like a smooth pill, not a box.
-            bottomExponent: model.state == .hidden ? settings.topExponent : (model.isExpanded ? settings.topExponent : settings.bottomExponent),
-            topExponent: settings.topExponent,
-            // Every visible state keeps the flush notch-continuation look —
-            // expanded no longer breaks from it with an ordinary rounded top.
             topIsConvex: false
         )
+    }
+
+    /// Collapsed and peek round their bottom to exactly half their height;
+    /// idle keeps the tight corner of the hardware notch, cards their own.
+    private var bottomRadius: CGFloat {
+        if model.isExpanded { return DS.Radius.expandedBottom }
+        switch model.state {
+        case .hidden: return DS.Radius.idle
+        case .collapsed, .peek: return CollapsedGeometry.bottomRadius(collapsedLike: islandSize.height)
+        case .expanded, .glance: return DS.Radius.expandedBottom
+        }
     }
 
     // MARK: - Collapsed
 
     private var collapsedContent: some View {
-        earsRow {
-            artworkView(size: settings.collapsedArtwork)
+        // Paused: the whole row is dimmed (cover and the flat-dot bars alike),
+        // so the pause reads clearly on an island that now stays visible.
+        earsRow(dimmed: !model.isPlaying) {
+            artworkView(size: DS.Icon.earSlot)
         } trailing: {
-            // Paused: the bars already lie flat as dots; dim them too so the
-            // pause reads clearly on an island that now stays visible.
-            EqualizerView(
-                isPlaying: model.isPlaying,
-                color: model.accent,
-                barWidth: 2,
-                maxHeight: 12
-            )
-            .opacity(model.isPlaying ? 1 : 0.45)
+            EqualizerView(isPlaying: model.isPlaying, color: model.accent)
         }
+    }
+
+    /// The collapsed silhouette's height. Ears are centred in this row in
+    /// collapsed *and* peek, so peek growing below it never moves the content.
+    private var collapsedRowHeight: CGFloat {
+        CGFloat(CollapsedGeometry.contentRowHeight(
+            collapsedHeight: settings.islandSize(
+                state: .collapsed, hasContent: true, notch: model.notchSize, hasNotch: model.hasNotch
+            ).height
+        ))
     }
 
     /// Collapsed content lives only in the two ears beside the camera: the
     /// notch-wide middle stays empty, since whatever is drawn there is hidden
     /// by the hardware (and screenshots don't show it, so it goes unnoticed).
+    ///
+    /// Every ear is `DS.Ear.width` wide whatever it shows, so the island keeps
+    /// one width. In peek the ears widen but the content keeps its place.
     private func earsRow<Leading: View, Trailing: View>(
+        dimmed: Bool = false,
         @ViewBuilder leading: () -> Leading,
         @ViewBuilder trailing: () -> Trailing
     ) -> some View {
         let notch = model.notchSize
-        let body = islandSize.width - settings.fillet * 2
-        let ear = max(0, (body - notch.width) / 2)
-        let rowHeight = min(islandSize.height, notch.height)
+        let ear = CollapsedGeometry.earWidth(
+            islandWidth: islandSize.width, fillet: settings.fillet, notchWidth: notch.width
+        )
+        let rowHeight = collapsedRowHeight
         // A menu-bar-high island (no hardware notch) can be shorter than the
-        // artwork; shrink the ears' content and paddings to fit, centred.
+        // ear slot; shrink the ears' content and inset to fit, centred.
         let scale = DisplayGeometry.collapsedContentScale(
             rowHeight: rowHeight,
-            contentHeight: settings.collapsedArtwork
+            contentHeight: DS.Icon.earSlot,
+            inset: DS.Space.xxs
         )
-        let padding = settings.collapsedPadding * scale
+        let inset = CollapsedGeometry.contentInset(earWidth: ear) * scale
         return HStack(spacing: 0) {
             // Measured before padding and framing: the drawn content itself,
             // which can overflow its ear if it doesn't fit.
             leading()
+                .opacity(dimmed ? .dsDimmed : .dsPrimary)
                 .fixedSize()
                 .scaleEffect(scale, anchor: .leading)
                 .reportsContentFrame("leading")
-                .padding(.leading, padding)
+                .padding(.leading, inset)
                 .frame(width: ear, alignment: .leading)
             Color.clear.frame(width: notch.width)
             trailing()
+                .opacity(dimmed ? .dsDimmed : .dsPrimary)
                 .fixedSize()
                 .scaleEffect(scale, anchor: .trailing)
                 .reportsContentFrame("trailing")
-                .padding(.trailing, padding)
+                .padding(.trailing, inset)
                 .frame(width: ear, alignment: .trailing)
         }
         .frame(height: rowHeight)
@@ -219,62 +224,60 @@ struct IslandView: View {
 
     // MARK: - Call
 
-    private static let callGreen = Color(red: 0.19, green: 0.82, blue: 0.35)
+    private static let callGreen = Accent.callGreen
 
     private func callCollapsedContent(_ call: CallInfo) -> some View {
         earsRow {
-            HStack(spacing: 6) {
-                appIcon(call.bundleID, size: settings.collapsedArtwork - 4)
-                Image(systemName: "phone.fill")
-                    .font(.dsCaption)
-                    .foregroundStyle(Self.callGreen)
+            // The app's icon (`appIcon` falls back to a phone glyph when it has
+            // none, so a call never shows two phones), then the camera glyph.
+            // The right ear stays the duration alone so a long call keeps clear
+            // of the notch.
+            HStack(spacing: DS.Ear.gap) {
+                appIcon(call.bundleID, size: DS.Icon.earSlot)
+                if call.cameraOn {
+                    EarSymbol(name: "video.fill", tint: Accent.callGreen)
+                }
             }
         } trailing: {
-            HStack(spacing: 5) {
-                if call.cameraOn {
-                    Image(systemName: "video.fill")
-                        .font(.dsCaption)
-                        .foregroundStyle(Self.callGreen)
-                }
-                callDuration(call, size: 13)
-            }
+            callEarDuration(call)
+        }
+    }
+
+    /// Ticks on its own, like `callDuration`, in the shared ear font.
+    private func callEarDuration(_ call: CallInfo) -> some View {
+        TimelineView(.periodic(from: call.startedAt, by: 1)) { context in
+            Text(formatTime(context.date.timeIntervalSince(call.startedAt)))
+                .font(.dsEar)
+                .foregroundStyle(Accent.callGreen)
+                .fitsEar()
         }
     }
 
     private func callExpandedContent(_ call: CallInfo) -> some View {
-        VStack(spacing: 12) {
-            HStack(spacing: 12) {
-                appIcon(call.bundleID, size: settings.expandedArtwork)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Звонок · \(call.appName)")
-                        .font(.dsCardTitle)
-                        .foregroundColor(.white)
-                        .lineLimit(1)
-                    callDuration(call, size: settings.artistFontSize)
+        VStack(alignment: .leading, spacing: DS.Space.sectionGap.pt) {
+            // Ticks on its own, so the rest of the island isn't re-rendered every second.
+            TimelineView(.periodic(from: call.startedAt, by: 1)) { context in
+                CardHeader(
+                    title: "Звонок · \(call.appName)",
+                    subtitle: FormatTime.clock(context.date.timeIntervalSince(call.startedAt))
+                ) {
+                    appIcon(call.bundleID, size: DS.Card.lead.pt)
                 }
-
-                Spacer(minLength: 0)
             }
 
-            HStack(spacing: 10) {
-                callIndicator(symbol: "mic.fill", active: true)
-                callIndicator(symbol: call.cameraOn ? "video.fill" : "video.slash.fill", active: call.cameraOn)
+            HStack(spacing: DS.Space.m.pt) {
+                CardIndicator(symbol: "mic.fill", tint: Self.callGreen)
+                CardIndicator(
+                    symbol: call.cameraOn ? "video.fill" : "video.slash.fill",
+                    tint: call.cameraOn ? Self.callGreen : .white.opacity(.dsTertiary)
+                )
                 Spacer(minLength: 0)
-                Button {
+                CapsuleButton(title: "Открыть", tint: Self.callGreen) {
                     model.openCallApp()
-                } label: {
-                    Text("Открыть")
-                        .font(.dsLabel)
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 6)
-                        .background(Capsule().fill(Self.callGreen))
                 }
-                .buttonStyle(.plain)
             }
         }
-        .expandedCard(settings: settings, notchHeight: model.notchSize.height)
+        .expandedCard(notchHeight: model.notchSize.height)
     }
 
     /// Ticks on its own, so the rest of the island isn't re-rendered every second.
@@ -287,18 +290,14 @@ struct IslandView: View {
         }
     }
 
-    private func callIndicator(symbol: String, active: Bool) -> some View {
-        Image(systemName: symbol)
-            .font(.dsLabel)
-            .foregroundStyle(active ? Self.callGreen : .white.opacity(.dsTertiary))
-            .frame(width: 28, height: 28)
-            .background(Circle().fill(Color.white.opacity(0.12)))
-    }
-
     private func appIcon(_ bundleID: String, size: CGFloat) -> some View {
         Group {
             if let icon = AppIcons.icon(for: bundleID) {
-                Image(nsImage: icon).resizable().aspectRatio(contentMode: .fit)
+                Image(nsImage: icon)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    // Transparent margins make app icons read smaller than art.
+                    .scaleEffect(CollapsedGeometry.appIconScale)
             } else {
                 Image(systemName: "phone.circle.fill")
                     .resizable()
@@ -311,179 +310,221 @@ struct IslandView: View {
     // MARK: - Timer
 
     private var timerCollapsedContent: some View {
-        earsRow {
-            Image(systemName: model.isTimerPaused ? "pause.fill" : "timer")
-                .font(.dsEar)
-                .foregroundStyle(Self.timerOrange)
+        // Paused: the whole row (glyph and digits) is the same orange, dimmed.
+        earsRow(dimmed: model.isTimerPaused) {
+            EarSymbol(name: model.isTimerPaused ? "pause.fill" : "timer", tint: Accent.timerOrange)
         } trailing: {
             Text(formatCountdown(model.timerRemaining ?? 0))
                 .font(.dsEar)
-                .foregroundColor(model.isTimerPaused ? .white.opacity(DS.Opacity.secondary) : Self.timerOrange)
-                .monospacedDigit()
-                .lineLimit(1)
+                .foregroundStyle(Accent.timerOrange)
+                .fitsEar()
         }
     }
 
     private var timerExpandedContent: some View {
-        VStack(spacing: 12) {
-            VStack(spacing: 2) {
-                Text(model.timerTitle.isEmpty
-                     ? (model.isTimerPaused ? "Таймер на паузе" : "Таймер")
-                     : model.timerTitle)
-                    .font(.dsLabel)
-                    .foregroundStyle(.white.opacity(.dsSecondary))
-                    .lineLimit(1)
+        let title = model.timerTitle.isEmpty
+            ? (model.isTimerPaused ? "Таймер на паузе" : "Таймер")
+            : model.timerTitle
+
+        return VStack(alignment: .leading, spacing: DS.Space.sectionGap.pt) {
+            SymbolCardHeader(
+                symbolName: model.isTimerPaused ? "pause.fill" : "timer",
+                tint: Self.timerOrange.opacity(model.isTimerPaused ? .dsDimmed : .dsPrimary),
+                title: title
+            ) {
                 Text(formatCountdown(model.timerRemaining ?? 0))
                     .font(.dsDisplay)
-                    .foregroundColor(model.isTimerPaused ? .white.opacity(DS.Opacity.secondary) : Self.timerOrange)
-                    .monospacedDigit()
+                    .foregroundColor(model.isTimerPaused ? .white.opacity(.dsDimmed) : Self.timerOrange)
+                    .lineLimit(1)
+                    .layoutPriority(1)
             }
 
-            GeometryReader { proxy in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(Color.white.opacity(.dsTrack))
-                    Capsule()
-                        .fill(Self.timerOrange.opacity(model.isTimerPaused ? 0.45 : 0.9))
-                        .frame(width: proxy.size.width * timerFraction)
-                }
-            }
-            .frame(height: 4)
+            DSProgressBar(
+                mode: .determinate(fraction: Double(timerFraction)),
+                tint: Self.timerOrange,
+                paused: model.isTimerPaused,
+                reduceMotion: reduceMotion
+            )
 
             // Pause and cancel stay in the Clock app: its daemon won't take
             // commands from a third-party process.
-            Button {
+            CapsuleButton(title: "Открыть Часы", tint: Self.timerOrange) {
                 model.openClock()
-            } label: {
-                Text("Открыть Часы")
-                    .font(.dsLabel)
-                    .foregroundStyle(.white.opacity(.dsSecondary))
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 6)
-                    .background(Capsule().fill(Color.white.opacity(0.12)))
             }
-            .buttonStyle(.plain)
         }
-        .expandedCard(settings: settings, notchHeight: model.notchSize.height)
+        .expandedCard(notchHeight: model.notchSize.height)
     }
 
     // MARK: - Agenda
 
     /// Calendar.app's red and Reminders' blue, so each reads as its own app.
-    static let calendarRed = Color(red: 1.0, green: 0.27, blue: 0.23)
-    static let remindersBlue = Color(red: 0.04, green: 0.52, blue: 1.0)
+    static let calendarRed = Accent.calendarRed
+    static let remindersBlue = Accent.remindersBlue
 
     private var glanceAccent: Color {
         switch model.glanceSymbol {
         case "checklist": return Self.remindersBlue
         case "calendar", "calendar.badge.clock": return Self.calendarRed
-        default: return model.accent
+        case "timer": return Self.timerOrange
+        default: return .white.opacity(.dsPrimary)
         }
     }
 
     private var agendaCollapsedContent: some View {
         earsRow {
-            Image(systemName: model.agenda.nowEvent != nil ? "calendar" : "checklist")
-                .font(.dsEar)
-                .foregroundStyle(model.agenda.nowEvent != nil ? Self.calendarRed : Self.remindersBlue)
+            EarSymbol(name: agendaEarSymbol, tint: agendaEarAccent)
         } trailing: {
             Text(agendaCollapsedTime)
                 .font(.dsEar)
-                .foregroundColor(.white)
-                .monospacedDigit()
-                .lineLimit(1)
+                .foregroundStyle(agendaEarAccent)
+                .fitsEar()
         }
+    }
+
+    private var agendaEarSymbol: String {
+        model.agenda.nowEvent != nil ? "calendar" : "checklist"
+    }
+
+    /// The ear's value wears the accent of what is on now: Calendar red for
+    /// an event, Reminders blue for a reminder.
+    /// An overdue reminder is red, like everywhere else.
+    private var agendaEarAccent: Color {
+        if model.agenda.nowEvent != nil { return Accent.calendarRed }
+        if let reminder = model.agenda.nowReminder, isOverdue(reminder) { return Accent.calendarRed }
+        return Accent.remindersBlue
     }
 
     private var agendaCollapsedTime: String {
         if let event = model.agenda.nowEvent {
-            switch AgendaFormat.collapsedLabel(start: event.start, end: event.end, now: Date()) {
-            case .startsAt(let start): return IslandViewModel.clock(start)
-            case .minutesLeft(let minutes): return "ещё \(minutes) мин"
-            case .endsAt(let end): return "до \(IslandViewModel.clock(end))"
-            }
+            return EarText.agenda(
+                AgendaFormat.collapsedLabel(start: event.start, end: event.end, now: Date()),
+                clock: IslandViewModel.clock
+            )
         }
         if let due = model.agenda.nowReminder?.due { return IslandViewModel.clock(due) }
         return IslandViewModel.clock(Date())
     }
 
-    /// What is on now, then the rest of today: up to three events and four
-    /// reminders, overdue ones in red.
+    /// What is on now, then the rest of today, overdue reminders in red.
+    /// Every row's text starts where the header's text does.
     private var agendaExpandedContent: some View {
         let agenda = model.agenda
-        let laterEvents = agenda.events.filter { $0 != agenda.nowEvent }.prefix(3)
+        let laterEvents = agenda.events.filter { $0 != agenda.nowEvent }.prefix(AgendaLimits.events)
         let reminders = AgendaFormat.listedReminders(
             agenda.reminders, nowReminder: agenda.nowReminder, hasNowEvent: agenda.nowEvent != nil
-        ).prefix(4)
+        ).prefix(AgendaLimits.reminders)
 
-        return VStack(alignment: .leading, spacing: 8) {
+        return VStack(alignment: .leading, spacing: DS.Space.sectionGap.pt) {
             if let event = agenda.nowEvent {
-                agendaHeader(
-                    symbol: "calendar.badge.clock",
-                    color: Self.calendarRed,
+                SymbolCardHeader(
+                    symbolName: "calendar.badge.clock",
+                    tint: Self.calendarRed,
                     title: event.title,
-                    subtitle: "Сейчас · \(IslandViewModel.clock(event.start))–\(IslandViewModel.clock(event.end))",
-                    actionSymbol: event.joinURL == nil ? nil : "video.fill",
-                    actionHelp: "Подключиться",
-                    action: { model.join(event) }
-                )
+                    subtitle: "Сейчас · \(IslandViewModel.clock(event.start))–\(IslandViewModel.clock(event.end))"
+                ) {
+                    if event.joinURL != nil {
+                        CardPrimaryButton(symbol: "video.fill", fill: Self.calendarRed, help: "Подключиться") {
+                            model.join(event)
+                        }
+                    }
+                }
             } else if let reminder = agenda.nowReminder {
-                agendaHeader(
-                    symbol: "checklist",
-                    color: Self.remindersBlue,
+                let reminderTint = isOverdue(reminder) ? Self.calendarRed : Self.remindersBlue
+                SymbolCardHeader(
+                    symbolName: "checklist",
+                    tint: reminderTint,
                     title: reminder.title,
-                    subtitle: "Напоминание",
-                    actionSymbol: "checkmark",
-                    actionHelp: "Выполнено",
-                    action: { model.completeReminder(id: reminder.id) }
-                )
+                    subtitle: "Напоминание"
+                ) {
+                    CardPrimaryButton(symbol: "checkmark", fill: reminderTint, help: "Выполнено") {
+                        model.completeReminder(id: reminder.id)
+                    }
+                }
             } else {
-                Text("Сегодня")
-                    .font(.dsCardTitle)
-                    .foregroundColor(.white)
+                SymbolCardHeader(symbolName: "calendar", tint: Self.calendarRed, title: "Сегодня")
             }
 
-            VStack(alignment: .leading, spacing: 5) {
-                ForEach(Array(laterEvents), id: \.id) { event in
-                    HStack(spacing: 8) {
-                        Text(IslandViewModel.clock(event.start))
-                            .font(.dsLabel)
-                            .foregroundColor(.white.opacity(.dsSecondary))
-                            .monospacedDigit()
-                            .frame(width: 40, alignment: .leading)
-                        Text(event.title)
-                            .font(.dsBody)
-                            .foregroundColor(.white.opacity(DS.Opacity.secondary))
-                            .lineLimit(1)
+            // Sections are sectionGap apart, rows inside a section rowGap.
+            if !laterEvents.isEmpty {
+                VStack(alignment: .leading, spacing: DS.Space.rowGap.pt) {
+                    ForEach(Array(laterEvents), id: \.id) { event in
+                        agendaRow(
+                            lead: Image(systemName: "calendar")
+                                .font(.dsBody)
+                                .foregroundStyle(Self.calendarRed),
+                            title: event.title,
+                            titleColor: .white.opacity(.dsPrimary),
+                            time: IslandViewModel.clock(event.start)
+                        )
                     }
                 }
-                ForEach(Array(reminders), id: \.id) { reminder in
-                    HStack(spacing: 8) {
-                        Button {
-                            model.completeReminder(id: reminder.id)
-                        } label: {
-                            Image(systemName: "circle")
-                                .font(.dsEar)
-                                .foregroundColor(Self.remindersBlue)
-                        }
-                        .buttonStyle(.plain)
-                        .frame(width: 40, alignment: .leading)
-                        Text(reminder.title)
-                            .font(.dsBody)
-                            .foregroundColor(isOverdue(reminder) ? Self.calendarRed : .white.opacity(DS.Opacity.secondary))
-                            .lineLimit(1)
+            }
+            if !reminders.isEmpty {
+                VStack(alignment: .leading, spacing: DS.Space.rowGap.pt) {
+                    // Only worth a label when it tells two sections apart.
+                    if !laterEvents.isEmpty {
+                        Text("Напоминания")
+                            .font(.dsCaption)
+                            .foregroundColor(.white.opacity(.dsTertiary))
+                            .padding(.leading, agendaTextInset)
+                    }
+                    ForEach(Array(reminders), id: \.id) { reminder in
+                        agendaRow(
+                            lead: CardIconButton(symbol: "circle", opacity: .dsPrimary, tint: Self.remindersBlue, help: "Выполнено") {
+                                model.completeReminder(id: reminder.id)
+                            },
+                            title: reminder.title,
+                            titleColor: isOverdue(reminder) ? Self.calendarRed : .white.opacity(.dsPrimary),
+                            time: reminder.due.map { IslandViewModel.clock($0) }
+                        )
                     }
                 }
-                if laterEvents.isEmpty && reminders.isEmpty {
-                    Text("На сегодня больше ничего")
-                        .font(.dsBody)
-                        .foregroundColor(.white.opacity(DS.Opacity.secondary))
-                }
+            }
+            if laterEvents.isEmpty && reminders.isEmpty {
+                Text("На сегодня больше ничего")
+                    .font(.dsBody)
+                    .foregroundColor(.white.opacity(.dsTertiary))
+                    .padding(.leading, agendaTextInset)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        // Rows run to the left edge; keep the last one off the rounded corner.
-        .padding(.bottom, 6)
-        .expandedCard(settings: settings, notchHeight: model.notchSize.height)
+        .expandedCard(notchHeight: model.notchSize.height)
+    }
+
+    private enum AgendaLimits {
+        static let events = 3
+        static let reminders = 3
+    }
+
+    /// Every list row is this tall — the 28pt reminder button overflows it —
+    /// so gaps between rows read the same whatever a row holds.
+    private var agendaRowHeight: CGFloat { DS.Space.xl.pt }
+
+    /// Where a `SymbolCardHeader`'s text starts: past its icon column.
+    private var agendaTextInset: CGFloat { (DS.Card.headerIconColumn + DS.Space.leadGap).pt }
+
+    /// Icon in the header's column, the title where the header's title starts,
+    /// the time trailing.
+    private func agendaRow<Lead: View>(
+        lead: Lead,
+        title: String,
+        titleColor: Color,
+        time: String?
+    ) -> some View {
+        HStack(spacing: DS.Space.leadGap.pt) {
+            lead.frame(width: DS.Card.headerIconColumn.pt)
+            Text(title)
+                .font(.dsBody)
+                .foregroundColor(titleColor)
+                .lineLimit(1)
+            Spacer(minLength: 0)
+            if let time {
+                Text(time)
+                    .font(.dsCaption)
+                    .foregroundColor(.white.opacity(.dsSecondary))
+            }
+        }
+        .frame(height: agendaRowHeight)
     }
 
     private func isOverdue(_ reminder: AgendaReminder) -> Bool {
@@ -491,48 +532,8 @@ struct IslandView: View {
         return due < Date()
     }
 
-    private func agendaHeader(
-        symbol: String,
-        color: Color,
-        title: String,
-        subtitle: String,
-        actionSymbol: String?,
-        actionHelp: String,
-        action: @escaping () -> Void
-    ) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: symbol)
-                .font(.system(size: 20, weight: .medium))
-                .foregroundStyle(color)
-                .frame(width: 30)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title)
-                    .font(.dsCardTitle)
-                    .foregroundColor(.white)
-                    .lineLimit(1)
-                Text(subtitle)
-                    .font(.dsBody)
-                    .foregroundColor(.white.opacity(.dsSecondary))
-                    .lineLimit(1)
-            }
-            Spacer(minLength: 0)
-            // A round icon button, so the title keeps the row's width.
-            if let actionSymbol {
-                Button(action: action) {
-                    Image(systemName: actionSymbol)
-                        .font(.dsEar)
-                        .foregroundStyle(.white)
-                        .frame(width: 32, height: 32)
-                        .background(Circle().fill(color))
-                }
-                .buttonStyle(.plain)
-                .help(actionHelp)
-            }
-        }
-    }
-
     /// The system timer's own color (Clock, Control Center).
-    static let timerOrange = Color(red: 1.0, green: 0.62, blue: 0.04)
+    static let timerOrange = Accent.timerOrange
 
     private var timerFraction: CGFloat {
         guard model.timerTotal > 0, let remaining = model.timerRemaining else { return 0 }
@@ -542,15 +543,17 @@ struct IslandView: View {
     // MARK: - Expanded
 
     private var expandedContent: some View {
-        VStack(spacing: 10) {
-            HStack(spacing: 12) {
-                artworkView(size: settings.expandedArtwork)
+        VStack(alignment: .leading, spacing: DS.Space.sectionGap.pt) {
+            // The header's own arrangement, with the transport row under the
+            // text: `CardHeader` has no slot for it.
+            HStack(spacing: DS.Space.leadGap.pt) {
+                artworkView(size: DS.Card.lead.pt)
 
-                VStack(alignment: .leading, spacing: 8) {
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(model.title.isEmpty ? "Nothing playing" : model.title)
+                VStack(alignment: .leading, spacing: DS.Space.m.pt) {
+                    VStack(alignment: .leading, spacing: DS.Space.titleGap.pt) {
+                        Text(model.title.isEmpty ? "Ничего не играет" : model.title)
                             .font(.dsCardTitle)
-                            .foregroundColor(.white)
+                            .foregroundColor(.white.opacity(.dsPrimary))
                             .lineLimit(1)
                         Text(model.artist)
                             .font(.dsBody)
@@ -566,37 +569,32 @@ struct IslandView: View {
 
             progressRow
         }
-        .expandedCard(settings: settings, notchHeight: model.notchSize.height)
+        .expandedCard(notchHeight: model.notchSize.height)
     }
 
     /// Elapsed, bar and remaining on one line, like the iOS player.
     private var progressRow: some View {
-        HStack(spacing: 8) {
-            Text(FormatTime.playback(position: model.position, duration: model.duration).elapsed)
+        let times = FormatTime.playback(position: model.position, duration: model.duration)
+        return HStack(spacing: DS.Space.inlineGap.pt) {
+            Text(times.elapsed)
                 .font(.dsCaption)
                 .foregroundColor(.white.opacity(.dsTertiary))
-                .monospacedDigit()
 
-            GeometryReader { proxy in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(Color.white.opacity(.dsTrack))
-                    Capsule()
-                        .fill(Color.white.opacity(.dsSecondary))
-                        .frame(width: proxy.size.width * progressFraction)
-                }
-            }
-            .frame(height: 4)
+            DSProgressBar(
+                mode: .determinate(fraction: Double(progressFraction)),
+                tint: model.accent,
+                reduceMotion: reduceMotion
+            )
 
             if model.duration > 0 {
-                Text("-\(FormatTime.playback(position: model.position, duration: model.duration).remaining)")
+                Text("-\(times.remaining)")
                     .font(.dsCaption)
                     .foregroundColor(.white.opacity(.dsTertiary))
-                    .monospacedDigit()
             } else {
                 // Live streams (YouTube/Twitch live) have no length.
                 Text("LIVE")
                     .font(.dsCaption)
-                    .foregroundColor(Accent.calendarRed.opacity(DS.Opacity.secondary))
+                    .foregroundColor(Accent.failureRed)
             }
         }
     }
@@ -610,55 +608,19 @@ struct IslandView: View {
 
     private func formatTime(_ seconds: Double) -> String { FormatTime.clock(seconds) }
 
+    /// Transport row: 28pt hit-frames edge to edge, the first glyph pulled
+    /// back so it lines up with the text above it.
     private var controlsRow: some View {
-        HStack(spacing: 14) {
-            Button {
-                AudioOutputs.showPicker()
-            } label: {
-                Image(systemName: "speaker.wave.2.circle")
-                    .font(.dsEar)
-                    .foregroundStyle(.white.opacity(.dsSecondary))
-            }
-            .buttonStyle(.plain)
-
-            Button {
-                model.skipPrevious()
-            } label: {
-                Image(systemName: "backward.end")
-                    .font(.dsEar)
-                    .foregroundStyle(.white.opacity(.dsSecondary))
-            }
-            .buttonStyle(.plain)
-
-            Button {
+        HStack(spacing: 0) {
+            CardIconButton(symbol: "speaker.wave.2") { AudioOutputs.showPicker() }
+            CardIconButton(symbol: "backward.end") { model.skipPrevious() }
+            CardPrimaryButton(symbol: model.isPlaying ? "pause.fill" : "play.fill", glyph: .black, fill: .white) {
                 model.togglePlayPause()
-            } label: {
-                Image(systemName: model.isPlaying ? "pause.fill" : "play.fill")
-                    .font(.dsEar)
-                    .foregroundStyle(.black)
-                    .frame(width: 32, height: 32)
-                    .background(Circle().fill(.white))
             }
-            .buttonStyle(.plain)
-
-            Button {
-                model.skipNext()
-            } label: {
-                Image(systemName: "forward.end")
-                    .font(.dsEar)
-                    .foregroundStyle(.white.opacity(.dsSecondary))
-            }
-            .buttonStyle(.plain)
-
-            Button {
-                model.openPlayer()
-            } label: {
-                Image(systemName: "arrow.up.forward.app")
-                    .font(.dsEar)
-                    .foregroundStyle(.white.opacity(.dsSecondary))
-            }
-            .buttonStyle(.plain)
+            CardIconButton(symbol: "forward.end") { model.skipNext() }
+            CardIconButton(symbol: "arrow.up.forward.app") { model.openPlayer() }
         }
+        .padding(.leading, -((DS.Button.secondaryHitFrame - DS.Button.secondaryIconMin) / 2).pt)
     }
 
     private func artworkView(size: CGFloat) -> some View {
@@ -676,11 +638,9 @@ private struct ExpandedHeightKey: PreferenceKey {
 private extension View {
     /// Shared frame of the expanded cards: content starts just under the
     /// camera cutout, sits at the top, and reports its natural height.
-    func expandedCard(settings: IslandSettings, notchHeight: CGFloat) -> some View {
+    func expandedCard(notchHeight: CGFloat) -> some View {
         self
-            .padding(.horizontal, settings.expandedPadding + settings.fillet)
-            .padding(.top, notchHeight + settings.expandedTopPadding * 0.5)
-            .padding(.bottom, settings.expandedTopPadding)
+            .cardFrame(notchHeight: notchHeight)
             .fixedSize(horizontal: false, vertical: true)
             .background(GeometryReader { proxy in
                 Color.clear.preference(key: ExpandedHeightKey.self, value: proxy.size.height)

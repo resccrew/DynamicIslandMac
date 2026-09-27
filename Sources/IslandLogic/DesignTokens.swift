@@ -169,6 +169,8 @@ public enum DS {
         public static let fadeDuration: Double = 0.32
         /// Flips (artwork), the equalizer, and press feedback.
         public static let microDuration: Double = 0.22
+        /// One sweep of an indeterminate bar or ring: five micro beats.
+        public static let indeterminatePeriod: Double = microDuration * 5
 
         public static let state = MotionCurveKind.spring(response: stateResponse, damping: stateDamping)
         public static let fade = MotionCurveKind.easeOut(duration: fadeDuration)

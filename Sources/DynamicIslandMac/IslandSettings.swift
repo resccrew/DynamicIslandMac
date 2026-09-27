@@ -1,6 +1,8 @@
+import IslandLogic
 import SwiftUI
 import Combine
 import IslandGeometry
+import IslandLogic
 
 /// Live-tunable geometry, shared by the window controller and the view and
 /// persisted across launches. Every edit in the settings panel writes here, and
@@ -77,6 +79,12 @@ final class IslandSettings: ObservableObject {
     /// Local Live Activity API for scripts (`LiveActivityServer`).
     @Published var allowExternalAPI: Bool { didSet { persist() } }
 
+    /// A light trackpad tick when the pointer first touches the island.
+    @Published var hoverHaptics: Bool { didSet { persist() } }
+    /// The welcome (settings opened on the Calendar tab) has been shown once.
+    /// Not part of `resetToDefaults`: a reset must not bring the welcome back.
+    @Published var hasCompletedOnboarding: Bool { didSet { persist() } }
+
     /// Which display hosts the island when several are connected.
     @Published var displayPolicy: IslandDisplayPolicy { didSet { persist() } }
 
@@ -85,13 +93,23 @@ final class IslandSettings: ObservableObject {
     enum Defaults {
         static let collapsedWidth = 280.0
         static let collapsedHeight = 38.0
-        static let expandedWidth = 280.0
+        /// Equals the peek width on the reference (virtual) notch: 190 + 128 + 16.
+        static let expandedWidth = CollapsedGeometry.expandedWidth(
+            notchWidth: DisplayGeometry.virtualNotchWidth,
+            peekGrowth: CollapsedGeometry.defaultPeekWidthGrowth
+        )
+        /// The default before the card matched the peek; stored copies of it
+        /// migrate to the new default.
+        static let legacyExpandedWidth = 280.0
+        /// Peek growth before it moved onto the spacing scale (18 / 5).
+        static let legacyPeekWidthGrowth = 18.0
+        static let legacyPeekHeightGrowth = 5.0
         static let expandedHeight = 148.0
 
-        static let fillet = 13.0
+        static let fillet = DS.Radius.fillet
         static let collapsedBottomRadius = 26.0
-        static let expandedBottomRadius = 36.0
-        static let idleBottomRadius = 9.0
+        static let expandedBottomRadius = DS.Radius.expandedBottom
+        static let idleBottomRadius = DS.Radius.idle
         static let bottomExponent = 5.0
         static let topExponent = 2.2
 
@@ -104,8 +122,8 @@ final class IslandSettings: ObservableObject {
         static let titleFontSize = 15.0
         static let artistFontSize = 12.0
 
-        static let peekWidthGrowth = 18.0
-        static let peekHeightGrowth = 5.0
+        static let peekWidthGrowth = CollapsedGeometry.defaultPeekWidthGrowth
+        static let peekHeightGrowth = CollapsedGeometry.defaultPeekHeightGrowth
         static let animationDuration = 0.32
         static let showShadow = false
         static let idleHeightExtra = 0.0
@@ -115,10 +133,11 @@ final class IslandSettings: ObservableObject {
         static let lockScreenArtSize = 360.0
         /// Below centre, so the card sits just above the avatar and password field.
         static let lockScreenOffsetY = 230.0
-        static let lockCardLightTheme = true
+        static let lockCardLightTheme = false
         static let lyricsEnabled = true
-        static let calendarEnabled = true
-        static let remindersEnabled = true
+        /// Off until the user turns them on: the system asks for access at that moment, not at launch.
+        static let calendarEnabled = false
+        static let remindersEnabled = false
         static let eventLeadMinutes = 5.0
         static let preventSleepOnLock = false
         static let preventSleepMinutes = 10.0
@@ -126,6 +145,7 @@ final class IslandSettings: ObservableObject {
         static let hideWhenPaused = false
         static let hideInFullScreen = true
         static let allowExternalAPI = true
+        static let hoverHaptics = true
         static let displayPolicy = IslandDisplayPolicy.primary
     }
 
@@ -134,7 +154,8 @@ final class IslandSettings: ObservableObject {
     private init() {
         collapsedWidth = Self.read("collapsedWidth", Defaults.collapsedWidth)
         collapsedHeight = Self.read("collapsedHeight", Defaults.collapsedHeight)
-        expandedWidth = Self.read("expandedWidth", Defaults.expandedWidth)
+        let storedExpandedWidth = Self.read("expandedWidth", Defaults.expandedWidth)
+        expandedWidth = storedExpandedWidth == Defaults.legacyExpandedWidth ? Defaults.expandedWidth : storedExpandedWidth
         expandedHeight = Self.read("expandedHeight", Defaults.expandedHeight)
 
         fillet = Self.read("fillet", Defaults.fillet)
@@ -153,8 +174,12 @@ final class IslandSettings: ObservableObject {
         titleFontSize = Self.read("titleFontSize", Defaults.titleFontSize)
         artistFontSize = Self.read("artistFontSize", Defaults.artistFontSize)
 
-        peekWidthGrowth = Self.read("peekWidthGrowth", Defaults.peekWidthGrowth)
-        peekHeightGrowth = Self.read("peekHeightGrowth", Defaults.peekHeightGrowth)
+        // Stored copies of the old defaults follow the new ones, so the card
+        // keeps matching the peek width.
+        let storedPeekWidth = Self.read("peekWidthGrowth", Defaults.peekWidthGrowth)
+        peekWidthGrowth = storedPeekWidth == Defaults.legacyPeekWidthGrowth ? Defaults.peekWidthGrowth : storedPeekWidth
+        let storedPeekHeight = Self.read("peekHeightGrowth", Defaults.peekHeightGrowth)
+        peekHeightGrowth = storedPeekHeight == Defaults.legacyPeekHeightGrowth ? Defaults.peekHeightGrowth : storedPeekHeight
         animationDuration = Self.read("animationDuration", Defaults.animationDuration)
         showShadow = UserDefaults.standard.object(forKey: "showShadow") as? Bool ?? Defaults.showShadow
         idleHeightExtra = Self.read("idleHeightExtra", Defaults.idleHeightExtra)
@@ -181,6 +206,11 @@ final class IslandSettings: ObservableObject {
             ?? Defaults.hideInFullScreen
         allowExternalAPI = UserDefaults.standard.object(forKey: "allowExternalAPI") as? Bool
             ?? Defaults.allowExternalAPI
+        hoverHaptics = UserDefaults.standard.object(forKey: "hoverHaptics") as? Bool
+            ?? Defaults.hoverHaptics
+        // An install that already has saved settings is not a first launch.
+        hasCompletedOnboarding = UserDefaults.standard.object(forKey: "hasCompletedOnboarding") as? Bool
+            ?? (UserDefaults.standard.object(forKey: "collapsedWidth") != nil)
         displayPolicy = IslandDisplayPolicy(stored: UserDefaults.standard.string(forKey: "displayPolicy"))
 
         isLoading = false
@@ -188,14 +218,16 @@ final class IslandSettings: ObservableObject {
 
     /// Window sizes include the fillet on each side, because the concave blends
     /// flare outward past the visible body to reach the screen edge.
-    var collapsedWindowSize: CGSize {
-        CGSize(width: collapsedWidth + fillet * 2, height: collapsedHeight)
-    }
-
-    var peekWindowSize: CGSize {
+    ///
+    /// The width is `notch + 2 · DS.Ear.width` for every kind of content, so the
+    /// island never changes width when the content does. The old `collapsedWidth`,
+    /// `collapsedHeight`, `collapsedArtwork`, `collapsedPadding`,
+    /// `collapsedBottomRadius` and exponent settings no longer drive the
+    /// collapsed layout; they stay only so stored preferences still load.
+    func collapsedWindowSize(notch: CGSize) -> CGSize {
         CGSize(
-            width: collapsedWidth + peekWidthGrowth + fillet * 2,
-            height: collapsedHeight + peekHeightGrowth
+            width: CollapsedGeometry.windowWidth(notchWidth: notch.width, fillet: fillet),
+            height: CollapsedGeometry.height(notchHeight: notch.height)
         )
     }
 
@@ -219,25 +251,19 @@ final class IslandSettings: ObservableObject {
     func containerSize(notch: CGSize, hasNotch: Bool) -> CGSize {
         let candidates: [CGSize] = [
             expandedWindowSize,
-            collapsedWindowSize,
+            islandSize(state: .collapsed, hasContent: true, notch: notch, hasNotch: hasNotch),
             islandSize(state: .peek, hasContent: true, notch: notch, hasNotch: hasNotch),
             islandSize(state: .peek, hasContent: false, notch: notch, hasNotch: hasNotch),
             glanceWindowSize,
-            // Timer and call widen the collapsed island; the fixed panel must
-            // hold it, or the hosting view stretches the window off-centre.
-            DisplayGeometry.collapsedIslandSize(
-                CGSize(width: wideEarsWidth(notch: notch, peek: true), height: collapsedHeight + peekHeightGrowth),
-                notch: notch,
-                hasNotch: hasNotch
-            ),
             // Expanded cards hug their content (music ≈ 158pt, agenda up to
             // ≈ 240pt), which can outgrow `expandedHeight`. The panel is
             // click-through outside the shape, so extra height costs nothing.
             CGSize(width: expandedWindowSize.width, height: Self.maxExpandedCardHeight),
         ]
+        // Headroom around the widest state, for the spring's overshoot.
         return CGSize(
-            width: candidates.map(\.width).max() ?? expandedWindowSize.width,
-            height: candidates.map(\.height).max() ?? expandedWindowSize.height
+            width: (candidates.map(\.width).max() ?? expandedWindowSize.width) + 2 * DS.Space.xl,
+            height: (candidates.map(\.height).max() ?? expandedWindowSize.height) + DS.Space.xl
         )
     }
 
@@ -256,17 +282,9 @@ final class IslandSettings: ObservableObject {
         )
     }
 
-    /// Width of each side ear, beside the camera, for timer and call content:
-    /// room for a 1:05:09 countdown or a call's icon and duration.
-    let wideEar: CGFloat = 64
-
-    /// Island width (fillets included) with `wideEar` on both sides of the notch.
-    func wideEarsWidth(notch: CGSize, peek: Bool) -> CGFloat {
-        notch.width + wideEar * 2 + fillet * 2 + (peek ? peekWidthGrowth : 0)
-    }
-
     /// Height of the glance's own row, under the notch-tall strip.
-    let glanceBodyHeight: CGFloat = 46
+    /// One primary-button row plus the card's margins under the cutout and at the bottom.
+    let glanceBodyHeight: CGFloat = (DS.Space.cardTopBelowNotch + DS.Button.primary + DS.Space.cardBottom).pt
 
     /// Collapsed and peek sizes are capped to the menu bar on displays without
     /// a hardware notch (see `DisplayGeometry.collapsedIslandSize`).
@@ -290,13 +308,13 @@ final class IslandSettings: ObservableObject {
         case .hidden:
             return idleSize(notch: notch)
         case .collapsed:
-            return collapsedWindowSize
+            return collapsedWindowSize(notch: notch)
         case .peek:
             // Growing from the idle footprint needs room for the fillets that
             // the idle state suppresses, so the visible body still widens.
             let idle = idleSize(notch: notch)
             let base = hasContent
-                ? collapsedWindowSize
+                ? collapsedWindowSize(notch: notch)
                 : CGSize(width: idle.width + fillet * 2, height: idle.height)
             return CGSize(
                 width: base.width + peekWidthGrowth,
@@ -346,6 +364,7 @@ final class IslandSettings: ObservableObject {
         hideWhenPaused = Defaults.hideWhenPaused
         hideInFullScreen = Defaults.hideInFullScreen
         allowExternalAPI = Defaults.allowExternalAPI
+        hoverHaptics = Defaults.hoverHaptics
         displayPolicy = Defaults.displayPolicy
         isLoading = false
         persist()
@@ -395,6 +414,8 @@ final class IslandSettings: ObservableObject {
         d.set(hideWhenPaused, forKey: "hideWhenPaused")
         d.set(hideInFullScreen, forKey: "hideInFullScreen")
         d.set(allowExternalAPI, forKey: "allowExternalAPI")
+        d.set(hoverHaptics, forKey: "hoverHaptics")
+        d.set(hasCompletedOnboarding, forKey: "hasCompletedOnboarding")
         d.set(displayPolicy.rawValue, forKey: "displayPolicy")
     }
 }

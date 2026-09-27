@@ -31,6 +31,29 @@ struct AgendaSnapshot: Equatable {
     var nowReminder: AgendaReminder?
 }
 
+/// What the settings window needs to know about one EventKit permission.
+enum AgendaAccess: Equatable {
+    case granted
+    /// The system has not asked yet; asking happens when the user turns the feature on.
+    case notDetermined
+    /// Refused, restricted, or write-only (not enough to read events).
+    case denied
+}
+
+/// The two permissions EventKit asks for separately.
+enum AgendaAccessKind {
+    case events
+    case reminders
+
+    /// Deep link into System Settings → Privacy & Security for this permission.
+    var systemSettingsURL: URL? {
+        switch self {
+        case .events: return URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars")
+        case .reminders: return URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Reminders")
+        }
+    }
+}
+
 /// One-off moments the island announces with a glance.
 enum AgendaAlert {
     case upcoming(AgendaEvent, minutes: Int)
@@ -44,7 +67,7 @@ enum AgendaAlert {
 /// Event-driven: reloads on `EKEventStoreChanged`, day change and settings
 /// changes, and schedules one timer per upcoming moment (heads-up, start, due,
 /// end of the "now" window) instead of polling.
-final class AgendaMonitor {
+final class AgendaMonitor: ObservableObject {
     /// How long a started event or a due reminder stays "now" in the island.
     static let nowWindow: TimeInterval = 10 * 60
 
@@ -58,6 +81,10 @@ final class AgendaMonitor {
     private var timers: [Timer] = []
     private var observers: [NSObjectProtocol] = []
     private var settingsCancellable: AnyCancellable?
+    private var previousEnabled: (events: Bool, reminders: Bool)?
+
+    @Published private(set) var eventsAccess: AgendaAccess = AgendaMonitor.access(for: .event)
+    @Published private(set) var remindersAccess: AgendaAccess = AgendaMonitor.access(for: .reminder)
     /// Fake data from the debug server replaces EventKit until cleared.
     private(set) var isInjecting = false
 
@@ -84,13 +111,16 @@ final class AgendaMonitor {
             },
         ]
         // `objectWillChange` fires before the new value lands.
+        previousEnabled = (settings.calendarEnabled, settings.remindersEnabled)
         settingsCancellable = settings.objectWillChange
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
-                self?.requestAccessIfNeeded()
+                self?.settingsChanged()
             }
 
-        requestAccessIfNeeded()
+        // No prompt at launch: the system asks when the user turns a feature on.
+        refreshAccess()
+        reload()
     }
 
     deinit {
@@ -103,19 +133,50 @@ final class AgendaMonitor {
     var eventsAuthorization: String { Self.describe(EKEventStore.authorizationStatus(for: .event)) }
     var remindersAuthorization: String { Self.describe(EKEventStore.authorizationStatus(for: .reminder)) }
 
-    /// Asks one permission at a time, so two system prompts never stack.
-    private func requestAccessIfNeeded() {
-        if settings.calendarEnabled, EKEventStore.authorizationStatus(for: .event) == .notDetermined {
-            store.requestFullAccessToEvents { [weak self] _, _ in
-                DispatchQueue.main.async { self?.requestAccessIfNeeded() }
-            }
-            return
+    /// Re-reads both permissions, e.g. after the user comes back from System Settings.
+    func refreshAccess() {
+        eventsAccess = Self.access(for: .event)
+        remindersAccess = Self.access(for: .reminder)
+    }
+
+    private static func access(for entity: EKEntityType) -> AgendaAccess {
+        switch EKEventStore.authorizationStatus(for: entity) {
+        case .fullAccess: return .granted
+        case .notDetermined: return .notDetermined
+        case .writeOnly, .denied, .restricted: return .denied
+        @unknown default: return .denied
         }
-        if settings.remindersEnabled, EKEventStore.authorizationStatus(for: .reminder) == .notDetermined {
-            store.requestFullAccessToReminders { [weak self] _, _ in
-                DispatchQueue.main.async { self?.requestAccessIfNeeded() }
+    }
+
+    /// Asks the system for one permission. Only ever called from a user action
+    /// (turning the feature on, or the «Разрешить» button), so two prompts never stack at launch.
+    func requestAccess(_ kind: AgendaAccessKind) {
+        let handler: EKEventStoreRequestAccessCompletionHandler = { [weak self] _, _ in
+            DispatchQueue.main.async {
+                self?.refreshAccess()
+                self?.reload()
             }
-            return
+        }
+        switch kind {
+        case .events:
+            guard eventsAccess == .notDetermined else { return }
+            store.requestFullAccessToEvents(completion: handler)
+        case .reminders:
+            guard remindersAccess == .notDetermined else { return }
+            store.requestFullAccessToReminders(completion: handler)
+        }
+    }
+
+    /// A feature just turned on is the moment to ask; any change re-plans the agenda.
+    private func settingsChanged() {
+        let now = (events: settings.calendarEnabled, reminders: settings.remindersEnabled)
+        let before = previousEnabled ?? (false, false)
+        previousEnabled = now
+        // One prompt at a time: reminders wait if calendar is asking in the same change.
+        if now.events, !before.events, eventsAccess == .notDetermined {
+            requestAccess(.events)
+        } else if now.reminders, !before.reminders, remindersAccess == .notDetermined {
+            requestAccess(.reminders)
         }
         reload()
     }

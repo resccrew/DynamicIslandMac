@@ -193,6 +193,8 @@ struct DSProgressBar: View {
     var tint: Color
     var paused: Bool = false
     var reduceMotion: Bool = false
+    /// The bar's empty track; white by default, black-on-light for the light lock card.
+    var trackColor: Color = Color.white.opacity(.dsTrack)
 
     @State private var phase: CGFloat = 0
 
@@ -200,7 +202,7 @@ struct DSProgressBar: View {
         GeometryReader { geo in
             ZStack(alignment: .leading) {
                 Capsule()
-                    .fill(Color.white.opacity(.dsTrack))
+                    .fill(trackColor)
                 switch mode {
                 case let .determinate(fraction):
                     Capsule()
@@ -213,7 +215,7 @@ struct DSProgressBar: View {
                         .offset(x: phase * (geo.size.width * 0.68))
                         .onAppear {
                             guard !reduceMotion else { return }
-                            withAnimation(.linear(duration: 1.1).repeatForever(autoreverses: true)) {
+                            withAnimation(.linear(duration: DS.Motion.indeterminatePeriod).repeatForever(autoreverses: true)) {
                                 phase = 1
                             }
                         }
@@ -231,7 +233,7 @@ struct CapsuleButton: View {
     let title: String
     var systemImage: String? = nil
     var tint: Color = .white
-    var fillOpacity: Double = 0.12
+    var fillOpacity: Double = .dsTrack
     var textOpacity: Double = .dsPrimary
     let action: () -> Void
 
@@ -243,6 +245,9 @@ struct CapsuleButton: View {
                 }
                 Text(title)
             }
+            // A capsule never wraps or shrinks: the text beside it gives way.
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
             .font(.dsLabel)
             .foregroundStyle(tint.opacity(textOpacity))
             .padding(.horizontal, DS.Button.capsuleHorizontal)

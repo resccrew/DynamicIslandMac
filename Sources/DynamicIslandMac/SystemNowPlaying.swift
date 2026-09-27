@@ -1,5 +1,6 @@
 import AppKit
 import IslandLogic
+import IslandLogic
 
 /// System-wide Now Playing: whatever macOS itself shows in Control Center —
 /// Spotify and Music, but also any browser tab playing a `<video>`/`<audio>`
@@ -27,6 +28,9 @@ final class SystemNowPlaying {
     private let frameworkPath: String
     private let queue = DispatchQueue(label: "SystemNowPlaying", qos: .utility)
     private var process: Process?
+    /// Write end held only by the app: when the app dies for any reason the
+    /// kernel closes it and `ChildGuard` takes the adapter down with it.
+    private var lifeline: Pipe?
     private var buffer = Data()
     private var onUpdate: ((Info?) -> Void)?
     private var stopped = false
@@ -64,10 +68,31 @@ final class SystemNowPlaying {
     }
 
     func stop() {
+        queue.async { [weak self] in self?.shutDown() }
+    }
+
+    /// Ends the adapter before returning, for `applicationWillTerminate`,
+    /// where the app may exit before an async stop would run.
+    func stopAndWait() {
+        // Bounded: if the queue is busy (the timer bootstrap reads the log for
+        // a second or two) the app exits anyway and the lifeline closes with it.
+        let done = DispatchSemaphore(value: 0)
         queue.async { [weak self] in
-            self?.stopped = true
-            self?.process?.terminate()
+            self?.shutDown()
+            done.signal()
         }
+        _ = done.wait(timeout: .now() + 1)
+    }
+
+    private func shutDown() {
+        stopped = true
+        closeLifeline()
+        process?.terminate()
+    }
+
+    private func closeLifeline() {
+        try? lifeline?.fileHandleForWriting.close()
+        lifeline = nil
     }
 
     // MARK: - Stream
@@ -75,8 +100,16 @@ final class SystemNowPlaying {
     private func launch() {
         guard !stopped else { return }
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: Self.perl)
-        process.arguments = [scriptPath, frameworkPath, "stream", "--no-diff", "--debounce=100", "--allow-missing-title"]
+        let command = ChildGuard.wrap(
+            executable: Self.perl,
+            arguments: [scriptPath, frameworkPath, "stream", "--no-diff", "--debounce=100", "--allow-missing-title"]
+        )
+        process.executableURL = URL(fileURLWithPath: command.executable)
+        process.arguments = command.arguments
+        closeLifeline()
+        let lifeline = Pipe()
+        self.lifeline = lifeline
+        process.standardInput = lifeline
         let pipe = Pipe()
         process.standardOutput = pipe
         // Live streams make the adapter warn on every update; nothing to read.
@@ -110,6 +143,7 @@ final class SystemNowPlaying {
     private func restart(sawOutput: Bool) {
         guard !stopped else { return }
         process = nil
+        closeLifeline()
         buffer.removeAll()
         if !sawOutput { failedStarts += 1 }
         guard failedStarts < 3 else {

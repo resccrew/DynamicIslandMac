@@ -34,6 +34,8 @@ final class SystemTimerMonitor {
     /// and eventually stop, instead of respawning every 2s forever.
     private var backoff = TimerRestartBackoff()
     private var stream: Process?
+    /// See `SystemNowPlaying.lifeline`: closing it, or the app dying, ends `log stream`.
+    private var lifeline: Pipe?
     private var buffer = Data()
     private var stopped = false
 
@@ -55,11 +57,31 @@ final class SystemTimerMonitor {
     }
 
     func stop() {
+        queue.async { [weak self] in self?.shutDown() }
+    }
+
+    /// Ends `log stream` before returning, for `applicationWillTerminate`.
+    func stopAndWait() {
+        // Bounded: if the queue is busy (the timer bootstrap reads the log for
+        // a second or two) the app exits anyway and the lifeline closes with it.
+        let done = DispatchSemaphore(value: 0)
         queue.async { [weak self] in
-            self?.stopped = true
-            self?.stream?.terminate()
-            self?.stream = nil
+            self?.shutDown()
+            done.signal()
         }
+        _ = done.wait(timeout: .now() + 1)
+    }
+
+    private func shutDown() {
+        stopped = true
+        closeLifeline()
+        stream?.terminate()
+        stream = nil
+    }
+
+    private func closeLifeline() {
+        try? lifeline?.fileHandleForWriting.close()
+        lifeline = nil
     }
 
     // MARK: - Log reading
@@ -86,8 +108,16 @@ final class SystemTimerMonitor {
     private func startStream() {
         guard !stopped else { return }
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/log")
-        process.arguments = ["stream", "--style", "ndjson", "--predicate", Self.predicate]
+        let command = ChildGuard.wrap(
+            executable: "/usr/bin/log",
+            arguments: ["stream", "--style", "ndjson", "--predicate", Self.predicate]
+        )
+        process.executableURL = URL(fileURLWithPath: command.executable)
+        process.arguments = command.arguments
+        closeLifeline()
+        let lifeline = Pipe()
+        self.lifeline = lifeline
+        process.standardInput = lifeline
         let pipe = Pipe()
         process.standardOutput = pipe
         process.standardError = FileHandle.nullDevice
@@ -121,6 +151,7 @@ final class SystemTimerMonitor {
     private func scheduleRestart(sawOutput: Bool) {
         guard !stopped else { return }
         stream = nil
+        closeLifeline()
         buffer.removeAll()
         if sawOutput { backoff.succeeded() }
         // A stream that ran fine and then exited restarts at the base delay.
