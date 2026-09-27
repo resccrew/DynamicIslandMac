@@ -6,6 +6,7 @@ enum Haptics {
     /// Single crisp tick when the island first notices the pointer. This is the
     /// only feedback the island gives — opening and closing stay silent.
     static func hover() {
+        guard IslandSettings.shared.hoverHaptics else { return }
         NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
     }
 }

@@ -93,6 +93,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .receive(on: RunLoop.main)
             .sink { [weak self] in self?.syncStatusItem() }
             .store(in: &cancellables)
+
+        showWelcomeOnFirstLaunch()
+    }
+
+    /// A first launch has no icon to look for and no permissions yet: open the
+    /// settings once, on the calendar tab, where turning a feature on asks for access.
+    private func showWelcomeOnFirstLaunch() {
+        guard !settings.hasCompletedOnboarding else { return }
+        settings.hasCompletedOnboarding = true
+        presentSettings(tab: .calendar)
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -119,11 +129,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func makeStatusItem() -> NSStatusItem {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         item.button?.image = NSImage(
-            systemSymbolName: "smallcircle.filled.circle",
+            systemSymbolName: "waveform",
             accessibilityDescription: "Dynamic Island"
         )
 
         let menu = NSMenu()
+
+        let calendarItem = NSMenuItem(
+            title: "Сегодня в календаре",
+            action: #selector(showAgenda),
+            keyEquivalent: "e"
+        )
+        calendarItem.target = self
+        menu.addItem(calendarItem)
+
+        menu.addItem(.separator())
 
         let settingsItem = NSMenuItem(
             title: "Настройки…",
@@ -134,7 +154,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(settingsItem)
 
         let previewItem = NSMenuItem(
-            title: "Показать карточку локскрина",
+            title: "Превью экрана блокировки",
             action: #selector(toggleLockPreview),
             keyEquivalent: "l"
         )
@@ -143,17 +163,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         menu.addItem(.separator())
 
-        let calendarItem = NSMenuItem(
-            title: "Сегодня",
-            action: #selector(showAgenda),
-            keyEquivalent: "e"
-        )
-        calendarItem.target = self
-        menu.addItem(calendarItem)
-
-        menu.addItem(.separator())
-
-        let quitItem = NSMenuItem(title: "Выйти", action: #selector(quit), keyEquivalent: "q")
+        let quitItem = NSMenuItem(title: "Завершить Dynamic Island", action: #selector(quit), keyEquivalent: "q")
         quitItem.target = self
         menu.addItem(quitItem)
 
@@ -161,15 +171,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return item
     }
 
+    /// Without calendar access the card would be empty, so the menu leads to where it is switched on.
     @objc private func showAgenda() {
+        let readsEvents = settings.calendarEnabled && agenda.eventsAccess == .granted
+        let readsReminders = settings.remindersEnabled && agenda.remindersAccess == .granted
+        guard readsEvents || readsReminders else {
+            presentSettings(tab: .calendar)
+            return
+        }
         model.showAgenda()
     }
 
     @objc private func openSettings() {
+        presentSettings(tab: nil)
+    }
+
+    private func presentSettings(tab: SettingsTab?) {
         if settingsController == nil {
-            settingsController = SettingsWindowController()
+            settingsController = SettingsWindowController(agenda: agenda)
         }
-        settingsController?.present()
+        settingsController?.present(tab: tab)
     }
 
     @objc private func toggleLockPreview() {
