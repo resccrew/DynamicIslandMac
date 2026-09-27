@@ -159,20 +159,24 @@ struct IslandView: View {
         // Paused: the whole row is dimmed (cover and the flat-dot bars alike),
         // so the pause reads clearly on an island that now stays visible.
         earsRow(dimmed: !model.isPlaying) {
-            artworkView(size: DS.Icon.earSlot)
+            artworkView(size: earIconSlot)
         } trailing: {
             EqualizerView(isPlaying: model.isPlaying, color: model.accent)
         }
     }
 
-    /// The collapsed silhouette's height. Ears are centred in this row in
-    /// collapsed *and* peek, so peek growing below it never moves the content.
+    /// Ears are centred in the notch's own height — not the taller collapsed
+    /// silhouette, and unaffected by peek — so the content sits exactly under
+    /// the camera cutout rather than in the small lip below it.
     private var collapsedRowHeight: CGFloat {
-        CGFloat(CollapsedGeometry.contentRowHeight(
-            collapsedHeight: settings.islandSize(
-                state: .collapsed, hasContent: true, notch: model.notchSize, hasNotch: model.hasNotch
-            ).height
-        ))
+        CGFloat(CollapsedGeometry.contentRowHeight(notchHeight: Double(model.notchSize.height)))
+    }
+
+    /// Leading/trailing slot for cover art or an app icon, scaled to the
+    /// notch rather than fixed, so it reads full on a tall real notch instead
+    /// of the same small square everywhere.
+    private var earIconSlot: CGFloat {
+        CGFloat(CollapsedGeometry.earIconSlot(notchHeight: Double(model.notchSize.height)))
     }
 
     /// Collapsed content lives only in the two ears beside the camera: the
@@ -193,9 +197,11 @@ struct IslandView: View {
         let rowHeight = collapsedRowHeight
         // A menu-bar-high island (no hardware notch) can be shorter than the
         // ear slot; shrink the ears' content and inset to fit, centred.
+        // Bounded by whichever is taller: the notch-scaled art/icon slot, or
+        // the fixed SF Symbol frame an ear without artwork uses instead.
         let scale = DisplayGeometry.collapsedContentScale(
             rowHeight: rowHeight,
-            contentHeight: DS.Icon.earSlot,
+            contentHeight: max(earIconSlot, DS.Icon.earSlot),
             inset: DS.Space.xxs
         )
         let inset = CollapsedGeometry.contentInset(earWidth: ear) * scale
@@ -233,7 +239,7 @@ struct IslandView: View {
             // The right ear stays the duration alone so a long call keeps clear
             // of the notch.
             HStack(spacing: DS.Ear.gap) {
-                appIcon(call.bundleID, size: DS.Icon.earSlot)
+                appIcon(call.bundleID, size: earIconSlot)
                 if call.cameraOn {
                     EarSymbol(name: "video.fill", tint: Accent.callGreen)
                 }

@@ -63,9 +63,50 @@ final class PeekSymmetryTests: XCTestCase {
         XCTAssertTrue(DS.Space.scale.contains(CollapsedGeometry.defaultPeekHeightGrowth))
     }
 
-    func testContentRowIgnoresPeekHeight() {
-        let collapsed = CollapsedGeometry.height(notchHeight: 32)
-        XCTAssertEqual(CollapsedGeometry.contentRowHeight(collapsedHeight: collapsed), collapsed)
+    /// Requirement (notch-only round): the ear content row is the notch
+    /// itself, not the taller collapsed silhouette — the row sits exactly
+    /// under the camera cutout, with the silhouette's `Space.s` lip below it
+    /// unused by content and unaffected by peek.
+    func testContentRowIsTheNotchNotTheSilhouette() {
+        for notchHeight in [32.0, 37.5] {
+            let silhouette = CollapsedGeometry.height(notchHeight: notchHeight)
+            XCTAssertEqual(CollapsedGeometry.contentRowHeight(notchHeight: notchHeight), notchHeight)
+            XCTAssertNotEqual(CollapsedGeometry.contentRowHeight(notchHeight: notchHeight), silhouette)
+            // Peek does not change the content row at all.
+            let peekSilhouette = silhouette + CollapsedGeometry.defaultPeekHeightGrowth
+            XCTAssertEqual(CollapsedGeometry.contentRowHeight(notchHeight: notchHeight), notchHeight)
+            XCTAssertNotEqual(CollapsedGeometry.contentRowHeight(notchHeight: notchHeight), peekSilhouette)
+        }
+    }
+}
+
+final class NotchOnlyGeometryTests: XCTestCase {
+    // The two real notches this app has been measured against: "More Space"
+    // scaled mode (32pt) and the live 1x-ish reading from the user's Mac (37.5pt).
+    func testIconSlotScalesWithTheNotch() {
+        XCTAssertEqual(CollapsedGeometry.earIconSlot(notchHeight: 37.5), 25.5, accuracy: 1e-9)
+        XCTAssertEqual(CollapsedGeometry.earIconSlot(notchHeight: 32), 20, accuracy: 1e-9)
+    }
+
+    func testIconSlotNeverNegativeOnATinyNotch() {
+        XCTAssertEqual(CollapsedGeometry.earIconSlot(notchHeight: 4), 0)
+    }
+
+    func testIconSlotAlwaysSmallerThanTheContentRow() {
+        // So the leading/trailing slot always fits its row without scaling.
+        for notchHeight in [24.0, 32, 37.5, 40] {
+            XCTAssertLessThan(
+                CollapsedGeometry.earIconSlot(notchHeight: notchHeight),
+                CollapsedGeometry.contentRowHeight(notchHeight: notchHeight)
+            )
+        }
+    }
+
+    func testEachNotchGetsItsOwnSilhouetteAndRow() {
+        for notchHeight in [32.0, 37.5] {
+            XCTAssertEqual(CollapsedGeometry.height(notchHeight: notchHeight), notchHeight + DS.Space.s)
+            XCTAssertEqual(CollapsedGeometry.contentRowHeight(notchHeight: notchHeight), notchHeight)
+        }
     }
 }
 

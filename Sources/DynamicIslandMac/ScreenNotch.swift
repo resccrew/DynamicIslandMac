@@ -6,17 +6,20 @@ import IslandGeometry
 /// On displays without a notch the island draws a virtual one as tall as that
 /// display's menu bar (see `DisplayGeometry.notchSize`).
 enum ScreenNotch {
+    /// Zero on `nil` (no notched display connected) — the island is hidden in
+    /// that case, so there is nothing for this size to describe.
     static func size(for screen: NSScreen? = IslandDisplay.screen) -> CGSize {
-        guard let screen else {
-            return CGSize(width: DisplayGeometry.virtualNotchWidth, height: NSStatusBar.system.thickness)
-        }
+        guard let screen else { return .zero }
         return DisplayGeometry.notchSize(
             for: IslandDisplay.info(for: screen),
             statusBarThickness: NSStatusBar.system.thickness
         )
     }
 
-    /// Whether the screen has a real camera notch to hide behind.
+    /// Whether the screen has a real camera notch. `IslandDisplay.screen`
+    /// only ever returns a notched screen, so this is `true` whenever it is
+    /// non-nil — kept as its own check for callers that already have an
+    /// `NSScreen` (e.g. re-measuring the current one).
     static func hasNotch(for screen: NSScreen? = IslandDisplay.screen) -> Bool {
         guard let screen else { return false }
         return IslandDisplay.info(for: screen).hasNotch
@@ -26,11 +29,15 @@ enum ScreenNotch {
 /// Picks the screen the island lives on. `NSScreen.main` follows keyboard
 /// focus and `window.screen` is nil before placement, so neither is stable.
 enum IslandDisplay {
+    /// The built-in notched panel — the only screen the island ever lives on.
+    /// `nil` with the lid closed or when only an external, non-notched
+    /// monitor is connected; every window controller hides itself in that case
+    /// rather than showing the island somewhere that has no real notch to
+    /// hide behind (see DESIGN-DECISIONS.md "Только на вырезе").
     static var screen: NSScreen? {
         let screens = NSScreen.screens
         let displays = screens.enumerated().map { info(for: $0.element, isPrimary: $0.offset == 0) }
-        let policy = IslandSettings.shared.displayPolicy
-        guard let index = DisplayGeometry.preferredDisplay(among: displays, policy: policy) else { return nil }
+        guard let index = DisplayGeometry.preferredNotchedDisplay(among: displays) else { return nil }
         return screens[index]
     }
 

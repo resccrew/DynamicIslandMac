@@ -183,16 +183,6 @@ struct SettingsView: View {
                              title: \.title) { $0.apply(to: settings) }
             }
 
-            Section {
-                Picker("Экран", selection: $settings.displayPolicy) {
-                    Text("Основной (со строкой меню)").tag(IslandDisplayPolicy.primary)
-                    Text("Встроенный, с вырезом").tag(IslandDisplayPolicy.builtIn)
-                }
-            } header: {
-                Text("Где показывать")
-            } footer: {
-                hint("Без встроенного экрана остров переезжает на основной.")
-            }
 
             Section {
                 Toggle("В полноэкранном режиме", isOn: $settings.hideInFullScreen)

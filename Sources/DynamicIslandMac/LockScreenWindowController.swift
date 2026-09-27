@@ -98,8 +98,8 @@ final class LockScreenWindowController: NSWindowController {
 
             // loginwindow re-orders itself as it settles, so keep reclaiming the
             // top spot for as long as the screen stays locked.
-            // Unlocked: nothing to reclaim, the tick is just a cheap flag read.
-            guard locked else { return }
+            // Unlocked, or no notched display to show on: nothing to reclaim.
+            guard locked, IslandDisplay.screen != nil else { return }
             if self.settings.lockScreenEnabled, self.model.isLockScreenVisible, self.model.hasContent,
                let window = self.window {
                 window.orderFrontRegardless()
@@ -150,6 +150,9 @@ final class LockScreenWindowController: NSWindowController {
         model.isLockScreenVisible = true
         model.resetLockScreenPresentation()
         resizeToScreen()
+        // Lid closed, external monitor only: no notched screen to show the
+        // card on — `resizeToScreen` already ordered the window out.
+        guard IslandDisplay.screen != nil else { return }
         window?.orderFrontRegardless()
         // The window must exist on screen before it can be moved between spaces.
         if let window {
@@ -180,20 +183,27 @@ final class LockScreenWindowController: NSWindowController {
         #endif
     }
 
-    /// Shows the overlay without locking, for checking the layout.
+    /// Shows the overlay without locking, for checking the layout. A no-op
+    /// with no notched display connected — there is nothing to preview on.
     func previewToggle() {
         guard let window else { return }
         if window.isVisible {
             window.orderOut(nil)
         } else {
+            guard IslandDisplay.screen != nil else { return }
             model.resetLockScreenPresentation()
             resizeToScreen()
             window.orderFrontRegardless()
         }
     }
 
+    /// Resizes to the notched display, or hides if none is connected.
     private func resizeToScreen() {
-        guard let window, let screen = IslandDisplay.screen else { return }
+        guard let window else { return }
+        guard let screen = IslandDisplay.screen else {
+            window.orderOut(nil)
+            return
+        }
         window.setFrame(screen.frame, display: true)
     }
 

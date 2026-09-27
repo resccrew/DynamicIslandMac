@@ -86,8 +86,6 @@ final class IslandSettings: ObservableObject {
     @Published var hasCompletedOnboarding: Bool { didSet { persist() } }
 
     /// Which display hosts the island when several are connected.
-    @Published var displayPolicy: IslandDisplayPolicy { didSet { persist() } }
-
     /// Announce headphones and the charger connecting.
 
     enum Defaults {
@@ -146,7 +144,6 @@ final class IslandSettings: ObservableObject {
         static let hideInFullScreen = true
         static let allowExternalAPI = true
         static let hoverHaptics = true
-        static let displayPolicy = IslandDisplayPolicy.primary
     }
 
     private var isLoading = true
@@ -211,7 +208,9 @@ final class IslandSettings: ObservableObject {
         // An install that already has saved settings is not a first launch.
         hasCompletedOnboarding = UserDefaults.standard.object(forKey: "hasCompletedOnboarding") as? Bool
             ?? (UserDefaults.standard.object(forKey: "collapsedWidth") != nil)
-        displayPolicy = IslandDisplayPolicy(stored: UserDefaults.standard.string(forKey: "displayPolicy"))
+        // `displayPolicy` is gone: the island now only ever lives on the
+        // built-in notched panel (see DESIGN-DECISIONS.md), so any stored
+        // value is simply ignored — no migration is needed.
 
         isLoading = false
     }
@@ -365,7 +364,6 @@ final class IslandSettings: ObservableObject {
         hideInFullScreen = Defaults.hideInFullScreen
         allowExternalAPI = Defaults.allowExternalAPI
         hoverHaptics = Defaults.hoverHaptics
-        displayPolicy = Defaults.displayPolicy
         isLoading = false
         persist()
     }
@@ -416,6 +414,5 @@ final class IslandSettings: ObservableObject {
         d.set(allowExternalAPI, forKey: "allowExternalAPI")
         d.set(hoverHaptics, forKey: "hoverHaptics")
         d.set(hasCompletedOnboarding, forKey: "hasCompletedOnboarding")
-        d.set(displayPolicy.rawValue, forKey: "displayPolicy")
     }
 }
