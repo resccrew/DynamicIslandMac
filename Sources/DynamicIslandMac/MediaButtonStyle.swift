@@ -1,4 +1,5 @@
 import SwiftUI
+import IslandLogic
 
 /// Gives transport buttons physical feedback: the glyph presses in while a
 /// circular highlight blooms behind it, then springs back.
@@ -7,19 +8,28 @@ struct MediaButtonStyle: ButtonStyle {
     var tint: Color = .white
 
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .background(
-                Circle()
-                    .fill(tint.opacity(configuration.isPressed ? 0.28 : 0))
-                    .scaleEffect(configuration.isPressed ? 1 : 0.55)
-                    .frame(width: diameter, height: diameter)
-            )
-            .scaleEffect(configuration.isPressed ? 0.78 : 1)
-            .animation(
-                // Instant on the way in, loosely sprung on release so it pops back.
-                .spring(response: configuration.isPressed ? 0.12 : 0.38, dampingFraction: 0.45),
-                value: configuration.isPressed
-            )
+        PressBody(configuration: configuration, diameter: diameter, tint: tint)
+    }
+
+    /// Reads Reduce Motion, which a `ButtonStyle` cannot do directly.
+    private struct PressBody: View {
+        let configuration: Configuration
+        let diameter: CGFloat
+        let tint: Color
+        @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+        private static let pressedScale: CGFloat = 0.9
+
+        var body: some View {
+            configuration.label
+                .background(
+                    Circle()
+                        .fill(tint.opacity(configuration.isPressed ? .dsTrack : 0))
+                        .frame(width: diameter, height: diameter)
+                )
+                .scaleEffect(configuration.isPressed && !reduceMotion ? Self.pressedScale : 1)
+                .animation(.dsMicro(reduceMotion: reduceMotion), value: configuration.isPressed)
+        }
     }
 }
 
