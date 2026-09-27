@@ -1,4 +1,5 @@
 import SwiftUI
+import IslandLogic
 
 /// Five-bar animated equalizer tinted to the album art.
 ///
@@ -10,11 +11,13 @@ import SwiftUI
 struct EqualizerView: View {
     let isPlaying: Bool
     var color: Color = .white
-    var barWidth: CGFloat = 2.5
-    var maxHeight: CGFloat = 14
+    var barWidth: CGFloat = DS.Icon.eqBarWidth
+    var maxHeight: CGFloat = DS.Icon.eqBarHeight
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private static let barCount = 5
-    private static let step = 0.22
+    private static let step = DS.Motion.microDuration
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: Self.step)) { context in
@@ -26,12 +29,13 @@ struct EqualizerView: View {
                 }
             }
             .frame(height: maxHeight)
-            .animation(.easeInOut(duration: Self.step), value: context.date)
+            .animation(reduceMotion ? nil : .dsMicro(reduceMotion: false), value: context.date)
         }
     }
 
     private func height(_ index: Int, at date: Date) -> CGFloat {
-        guard isPlaying else { return max(barWidth, maxHeight * 0.2) }
+        // Reduce Motion: the bars rest as dots instead of dancing.
+        guard isPlaying, !reduceMotion else { return max(barWidth, maxHeight * 0.2) }
 
         // Each bar gets its own offset and rate so they never move in lockstep.
         let t = date.timeIntervalSinceReferenceDate

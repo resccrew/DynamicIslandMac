@@ -1,4 +1,5 @@
 import SwiftUI
+import IslandLogic
 
 /// The island silhouette, drawn to read as a continuation of the hardware notch.
 ///
@@ -17,11 +18,9 @@ struct NotchShape: Shape {
     var topFillet: CGFloat
     /// Radius of the rounded bottom corners.
     var bottomRadius: CGFloat
-    /// Lamé exponent for the bottom corners (2 is circular; higher is squarer/smoother).
-    var bottomExponent: CGFloat = 5
-    /// Lamé exponent for the concave fillets. Kept near-circular: the blend is
-    /// small, and pushing it far from 2 makes the flare read as a step.
-    var topExponent: CGFloat = 2.2
+    /// Lamé exponent for every corner and fillet (2 is circular). One value
+    /// for all states, so the shape never changes character between them.
+    var exponent: CGFloat = CGFloat(CollapsedGeometry.shapeExponent)
     /// The collapsed pill and idle state read fine flush against the screen
     /// edge (`false`, the default) — that's the notch-continuation look. The
     /// expanded card is much taller and, at that scale, the same flush top
@@ -67,7 +66,7 @@ struct NotchShape: Shape {
             radius: topRadius,
             from: CGVector(dx: -1, dy: 0),
             to: CGVector(dx: 0, dy: -1),
-            exponent: topExponent
+            exponent: exponent
         )
 
         path.addLine(to: CGPoint(x: right - topRadius, y: top))
@@ -78,7 +77,7 @@ struct NotchShape: Shape {
             radius: topRadius,
             from: CGVector(dx: 0, dy: -1),
             to: CGVector(dx: 1, dy: 0),
-            exponent: topExponent
+            exponent: exponent
         )
 
         path.addLine(to: CGPoint(x: right, y: bottom - bottomR))
@@ -89,7 +88,7 @@ struct NotchShape: Shape {
             radius: bottomR,
             from: CGVector(dx: 1, dy: 0),
             to: CGVector(dx: 0, dy: 1),
-            exponent: bottomExponent
+            exponent: exponent
         )
 
         path.addLine(to: CGPoint(x: left + bottomR, y: bottom))
@@ -100,7 +99,7 @@ struct NotchShape: Shape {
             radius: bottomR,
             from: CGVector(dx: 0, dy: 1),
             to: CGVector(dx: -1, dy: 0),
-            exponent: bottomExponent
+            exponent: exponent
         )
 
         path.closeSubpath()
@@ -132,7 +131,7 @@ struct NotchShape: Shape {
             radius: fillet,
             from: CGVector(dx: 0, dy: -1),
             to: CGVector(dx: 1, dy: 0),
-            exponent: topExponent
+            exponent: exponent
         )
 
         path.addLine(to: CGPoint(x: left + fillet, y: bottom - radius))
@@ -144,7 +143,7 @@ struct NotchShape: Shape {
             radius: radius,
             from: CGVector(dx: -1, dy: 0),
             to: CGVector(dx: 0, dy: 1),
-            exponent: bottomExponent
+            exponent: exponent
         )
 
         path.addLine(to: CGPoint(x: right - fillet - radius, y: bottom))
@@ -156,7 +155,7 @@ struct NotchShape: Shape {
             radius: radius,
             from: CGVector(dx: 0, dy: 1),
             to: CGVector(dx: 1, dy: 0),
-            exponent: bottomExponent
+            exponent: exponent
         )
 
         path.addLine(to: CGPoint(x: right - fillet, y: top + fillet))
@@ -168,7 +167,7 @@ struct NotchShape: Shape {
             radius: fillet,
             from: CGVector(dx: -1, dy: 0),
             to: CGVector(dx: 0, dy: -1),
-            exponent: topExponent
+            exponent: exponent
         )
 
         path.closeSubpath()

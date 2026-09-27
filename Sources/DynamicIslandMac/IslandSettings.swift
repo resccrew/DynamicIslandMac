@@ -1,6 +1,7 @@
 import SwiftUI
 import Combine
 import IslandGeometry
+import IslandLogic
 
 /// Live-tunable geometry, shared by the window controller and the view and
 /// persisted across launches. Every edit in the settings panel writes here, and
@@ -88,10 +89,10 @@ final class IslandSettings: ObservableObject {
         static let expandedWidth = 280.0
         static let expandedHeight = 148.0
 
-        static let fillet = 13.0
+        static let fillet = DS.Radius.fillet
         static let collapsedBottomRadius = 26.0
-        static let expandedBottomRadius = 36.0
-        static let idleBottomRadius = 9.0
+        static let expandedBottomRadius = DS.Radius.expandedBottom
+        static let idleBottomRadius = DS.Radius.idle
         static let bottomExponent = 5.0
         static let topExponent = 2.2
 
@@ -104,8 +105,8 @@ final class IslandSettings: ObservableObject {
         static let titleFontSize = 15.0
         static let artistFontSize = 12.0
 
-        static let peekWidthGrowth = 18.0
-        static let peekHeightGrowth = 5.0
+        static let peekWidthGrowth = CollapsedGeometry.defaultPeekWidthGrowth
+        static let peekHeightGrowth = CollapsedGeometry.defaultPeekHeightGrowth
         static let animationDuration = 0.32
         static let showShadow = false
         static let idleHeightExtra = 0.0
@@ -188,14 +189,16 @@ final class IslandSettings: ObservableObject {
 
     /// Window sizes include the fillet on each side, because the concave blends
     /// flare outward past the visible body to reach the screen edge.
-    var collapsedWindowSize: CGSize {
-        CGSize(width: collapsedWidth + fillet * 2, height: collapsedHeight)
-    }
-
-    var peekWindowSize: CGSize {
+    ///
+    /// The width is `notch + 2 · DS.Ear.width` for every kind of content, so the
+    /// island never changes width when the content does. The old `collapsedWidth`,
+    /// `collapsedHeight`, `collapsedArtwork`, `collapsedPadding`,
+    /// `collapsedBottomRadius` and exponent settings no longer drive the
+    /// collapsed layout; they stay only so stored preferences still load.
+    func collapsedWindowSize(notch: CGSize) -> CGSize {
         CGSize(
-            width: collapsedWidth + peekWidthGrowth + fillet * 2,
-            height: collapsedHeight + peekHeightGrowth
+            width: CollapsedGeometry.windowWidth(notchWidth: notch.width, fillet: fillet),
+            height: CollapsedGeometry.height(notchHeight: notch.height)
         )
     }
 
@@ -219,25 +222,19 @@ final class IslandSettings: ObservableObject {
     func containerSize(notch: CGSize, hasNotch: Bool) -> CGSize {
         let candidates: [CGSize] = [
             expandedWindowSize,
-            collapsedWindowSize,
+            islandSize(state: .collapsed, hasContent: true, notch: notch, hasNotch: hasNotch),
             islandSize(state: .peek, hasContent: true, notch: notch, hasNotch: hasNotch),
             islandSize(state: .peek, hasContent: false, notch: notch, hasNotch: hasNotch),
             glanceWindowSize,
-            // Timer and call widen the collapsed island; the fixed panel must
-            // hold it, or the hosting view stretches the window off-centre.
-            DisplayGeometry.collapsedIslandSize(
-                CGSize(width: wideEarsWidth(notch: notch, peek: true), height: collapsedHeight + peekHeightGrowth),
-                notch: notch,
-                hasNotch: hasNotch
-            ),
             // Expanded cards hug their content (music ≈ 158pt, agenda up to
             // ≈ 240pt), which can outgrow `expandedHeight`. The panel is
             // click-through outside the shape, so extra height costs nothing.
             CGSize(width: expandedWindowSize.width, height: Self.maxExpandedCardHeight),
         ]
+        // Headroom around the widest state, for the spring's overshoot.
         return CGSize(
-            width: candidates.map(\.width).max() ?? expandedWindowSize.width,
-            height: candidates.map(\.height).max() ?? expandedWindowSize.height
+            width: (candidates.map(\.width).max() ?? expandedWindowSize.width) + 2 * DS.Space.xl,
+            height: (candidates.map(\.height).max() ?? expandedWindowSize.height) + DS.Space.xl
         )
     }
 
@@ -254,15 +251,6 @@ final class IslandSettings: ObservableObject {
             width: max(collapsedWidth, 280) + fillet * 2,
             height: collapsedHeight + glanceBodyHeight
         )
-    }
-
-    /// Width of each side ear, beside the camera, for timer and call content:
-    /// room for a 1:05:09 countdown or a call's icon and duration.
-    let wideEar: CGFloat = 64
-
-    /// Island width (fillets included) with `wideEar` on both sides of the notch.
-    func wideEarsWidth(notch: CGSize, peek: Bool) -> CGFloat {
-        notch.width + wideEar * 2 + fillet * 2 + (peek ? peekWidthGrowth : 0)
     }
 
     /// Height of the glance's own row, under the notch-tall strip.
@@ -290,13 +278,13 @@ final class IslandSettings: ObservableObject {
         case .hidden:
             return idleSize(notch: notch)
         case .collapsed:
-            return collapsedWindowSize
+            return collapsedWindowSize(notch: notch)
         case .peek:
             // Growing from the idle footprint needs room for the fillets that
             // the idle state suppresses, so the visible body still widens.
             let idle = idleSize(notch: notch)
             let base = hasContent
-                ? collapsedWindowSize
+                ? collapsedWindowSize(notch: notch)
                 : CGSize(width: idle.width + fillet * 2, height: idle.height)
             return CGSize(
                 width: base.width + peekWidthGrowth,

@@ -44,42 +44,64 @@ struct LiveActivityLeading: View {
     let activity: LiveActivity
 
     var body: some View {
-        Image(systemName: LiveActivityParts.symbolName(activity))
-            .font(.dsEar)
-            .foregroundStyle(LiveActivityParts.accent(activity))
+        EarSymbol(name: symbol, tint: LiveActivityParts.accent(activity))
+    }
+
+    /// The pushed symbol in every state, so a finished activity still says
+    /// what it was; the outcome is shown on the right.
+    private var symbol: String {
+        if let pushed = activity.symbol, NSImage(systemSymbolName: pushed, accessibilityDescription: nil) != nil {
+            return pushed
+        }
+        return "bolt.fill"
     }
 }
 
-/// Progress ring, spinner while indeterminate, or the percentage when done.
+/// Progress ring, spinner while indeterminate, or the outcome glyph when done. The
+/// ring, the equalizer and the ear symbols all share one height (`DS.Icon`).
 struct LiveActivityTrailing: View {
     let activity: LiveActivity
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         switch activity.state {
         case .running:
             if let progress = activity.progress {
-                ZStack {
-                    Circle().stroke(Color.white.opacity(.dsTrack), lineWidth: 2.5)
-                    Circle()
-                        .trim(from: 0, to: progress)
-                        .stroke(LiveActivityParts.accent(activity), style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
-                        .rotationEffect(.degrees(-90))
-                        .animation(.easeOut(duration: 0.3), value: progress)
-                }
-                .frame(width: 16, height: 16)
+                ring(trim: progress)
+                    .animation(.dsFade(reduceMotion: reduceMotion), value: progress)
             } else {
-                ProgressView()
-                    .progressViewStyle(.circular)
-                    .controlSize(.small)
-                    .tint(LiveActivityParts.accent(activity))
-                    .frame(width: 16, height: 16)
+                spinner
             }
         case .success, .failure:
-            Text(activity.title)
-                .font(.dsLabel)
-                .foregroundStyle(LiveActivityParts.accent(activity))
-                .lineLimit(1)
-                .frame(maxWidth: 70)
+            EarSymbol(name: LiveActivityParts.symbolName(activity), tint: LiveActivityParts.accent(activity))
+        }
+    }
+
+    private func ring(trim: Double) -> some View {
+        ZStack {
+            Circle().stroke(Color.white.opacity(.dsTrack), lineWidth: DS.Icon.ringStroke)
+            Circle()
+                .trim(from: 0, to: trim)
+                .stroke(LiveActivityParts.accent(activity), style: StrokeStyle(lineWidth: DS.Icon.ringStroke, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+        }
+        .frame(width: DS.Icon.ring, height: DS.Icon.ring)
+    }
+
+    /// Indeterminate: a quarter arc turning once a second, drawn like the
+    /// ring rather than the system spinner. Still under Reduce Motion.
+    private var spinner: some View {
+        TimelineView(.animation(paused: reduceMotion)) { context in
+            let turn = context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1)
+            ZStack {
+                Circle().stroke(Color.white.opacity(.dsTrack), lineWidth: DS.Icon.ringStroke)
+                Circle()
+                    .trim(from: 0, to: 0.25)
+                    .stroke(LiveActivityParts.accent(activity), style: StrokeStyle(lineWidth: DS.Icon.ringStroke, lineCap: .round))
+                    .rotationEffect(.degrees(reduceMotion ? -90 : turn * 360 - 90))
+            }
+            .frame(width: DS.Icon.ring, height: DS.Icon.ring)
         }
     }
 }
