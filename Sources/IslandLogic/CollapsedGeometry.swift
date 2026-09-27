@@ -11,10 +11,11 @@ public enum CollapsedGeometry {
     /// shape never "clicks" between collapsed, peek, hidden and expanded.
     public static let shapeExponent: Double = 2.2
 
-    /// Smallest scale a text label may shrink to so it still fits its ear
-    /// (the agenda's «ещё 45 мин» is wider than one ear at full size).
-    /// Local to zone A; promote to `DS` if other zones need it.
-    public static let minTextScale: Double = 0.75
+    /// Smallest scale an ear label may shrink to. Ear text is never cut with
+    /// an ellipsis: labels are written short enough (see `EarText`) to fit at
+    /// full size, and this only absorbs font-metric error. Local to zone A;
+    /// promote to `DS` if other zones need it.
+    public static let minTextScale: Double = 0.85
 
     /// Height of the collapsed pill: the notch plus a `Space.s` lip below it.
     public static func height(notchHeight: Double) -> Double {

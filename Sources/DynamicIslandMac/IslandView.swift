@@ -387,11 +387,10 @@ struct IslandView: View {
 
     private var agendaCollapsedTime: String {
         if let event = model.agenda.nowEvent {
-            switch AgendaFormat.collapsedLabel(start: event.start, end: event.end, now: Date()) {
-            case .startsAt(let start): return IslandViewModel.clock(start)
-            case .minutesLeft(let minutes): return "ещё \(minutes) мин"
-            case .endsAt(let end): return "до \(IslandViewModel.clock(end))"
-            }
+            return EarText.agenda(
+                AgendaFormat.collapsedLabel(start: event.start, end: event.end, now: Date()),
+                clock: IslandViewModel.clock
+            )
         }
         if let due = model.agenda.nowReminder?.due { return IslandViewModel.clock(due) }
         return IslandViewModel.clock(Date())

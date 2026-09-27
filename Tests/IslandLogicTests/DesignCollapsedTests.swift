@@ -97,7 +97,72 @@ final class CollapsedShapeTests: XCTestCase {
     func testTextShrinksButNotBelowTheFloor() {
         XCTAssertGreaterThan(CollapsedGeometry.minTextScale, 0)
         XCTAssertLessThan(CollapsedGeometry.minTextScale, 1)
-        // «ещё 45 мин» (~70pt at 13pt) fits the ear content at the floor.
-        XCTAssertLessThanOrEqual(70 * CollapsedGeometry.minTextScale, CollapsedGeometry.contentWidth)
+        // Ear text is never cut, and the floor stays gentle.
+        XCTAssertGreaterThanOrEqual(CollapsedGeometry.minTextScale, 0.85)
+    }
+}
+
+final class EarTextTests: XCTestCase {
+    private let now = Date(timeIntervalSince1970: 1_800_000_000)
+    private let clock: (Date) -> String = { date in
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(identifier: "UTC")
+        formatter.dateFormat = "HH:mm"
+        return formatter.string(from: date)
+    }
+
+    private func label(startIn: Double, lasts: Double) -> AgendaFormat.CollapsedLabel {
+        AgendaFormat.collapsedLabel(
+            start: now.addingTimeInterval(startIn), end: now.addingTimeInterval(startIn + lasts), now: now
+        )
+    }
+
+    func testAgendaFormatsAreCompact() {
+        XCTAssertEqual(EarText.agenda(label(startIn: -60, lasts: 28 * 60 + 60), clock: clock), "28 мин")
+        XCTAssertEqual(EarText.agenda(label(startIn: -60, lasts: 2 * 3600), clock: clock), "до \(clock(now.addingTimeInterval(7140)))")
+        XCTAssertEqual(EarText.agenda(label(startIn: 300, lasts: 1800), clock: clock), clock(now.addingTimeInterval(300)))
+    }
+
+    func testEveryAgendaLabelFitsTheEar() {
+        // Minutes left: 1...60 (ceil can reach 60), plus both clock forms.
+        for minutes in 1...60 {
+            let text = EarText.agenda(.minutesLeft(minutes), clock: clock)
+            XCTAssertTrue(EarText.fits(text), text)
+            XCTAssertFalse(text.contains("ещё"), text)
+        }
+        for hour in 0..<24 {
+            for minute in [0, 9, 59] {
+                let date = Date(timeIntervalSince1970: Double(hour * 3600 + minute * 60))
+                for label in [AgendaFormat.CollapsedLabel.startsAt(date), .endsAt(date)] {
+                    let text = EarText.agenda(label, clock: clock)
+                    XCTAssertTrue(EarText.fits(text), text)
+                }
+            }
+        }
+    }
+
+    func testOverdueReminderIsPlainTime() {
+        // A reminder due at 04:07 reads exactly that, and it fits.
+        let due = Date(timeIntervalSince1970: 4 * 3600 + 7 * 60)
+        XCTAssertEqual(clock(due), "04:07")
+        XCTAssertTrue(EarText.fits(clock(due)))
+    }
+
+    func testTimerAndCallClocksFitAtTheirLongest() {
+        for seconds in [0.0, 59, 3599, 3600, 3725, 36000, 86399] {
+            let text = FormatTime.clock(seconds)
+            XCTAssertTrue(EarText.fits(text), text)
+        }
+        XCTAssertEqual(FormatTime.clock(3725), "1:02:05")
+    }
+
+    func testEstimatorRejectsTheOldLabel() {
+        XCTAssertFalse(EarText.fits("ещё 28 мин"))
+    }
+
+    func testMostLabelsNeedNoScalingAtAll() {
+        XCTAssertLessThanOrEqual(EarText.estimatedWidth("28 мин"), CollapsedGeometry.contentWidth)
+        XCTAssertLessThanOrEqual(EarText.estimatedWidth("1:02:05"), CollapsedGeometry.contentWidth)
     }
 }
