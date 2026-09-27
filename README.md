@@ -126,4 +126,4 @@ Project architecture, coding rules, and known risks are documented in `claude.md
 
 ## License
 
-No license file is included yet — all rights reserved by default. The vendored `Vendor/mediaremote-adapter` is BSD-3-licensed; see `Vendor/mediaremote-adapter/LICENSE`.
+MIT, see [LICENSE](LICENSE). The vendored `Vendor/mediaremote-adapter` is BSD-3-licensed; see `Vendor/mediaremote-adapter/LICENSE`.
