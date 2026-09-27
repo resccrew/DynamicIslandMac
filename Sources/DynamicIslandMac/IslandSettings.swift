@@ -93,7 +93,17 @@ final class IslandSettings: ObservableObject {
     enum Defaults {
         static let collapsedWidth = 280.0
         static let collapsedHeight = 38.0
-        static let expandedWidth = 280.0
+        /// Equals the peek width on the reference (virtual) notch: 190 + 128 + 16.
+        static let expandedWidth = CollapsedGeometry.expandedWidth(
+            notchWidth: DisplayGeometry.virtualNotchWidth,
+            peekGrowth: CollapsedGeometry.defaultPeekWidthGrowth
+        )
+        /// The default before the card matched the peek; stored copies of it
+        /// migrate to the new default.
+        static let legacyExpandedWidth = 280.0
+        /// Peek growth before it moved onto the spacing scale (18 / 5).
+        static let legacyPeekWidthGrowth = 18.0
+        static let legacyPeekHeightGrowth = 5.0
         static let expandedHeight = 148.0
 
         static let fillet = DS.Radius.fillet
@@ -144,7 +154,8 @@ final class IslandSettings: ObservableObject {
     private init() {
         collapsedWidth = Self.read("collapsedWidth", Defaults.collapsedWidth)
         collapsedHeight = Self.read("collapsedHeight", Defaults.collapsedHeight)
-        expandedWidth = Self.read("expandedWidth", Defaults.expandedWidth)
+        let storedExpandedWidth = Self.read("expandedWidth", Defaults.expandedWidth)
+        expandedWidth = storedExpandedWidth == Defaults.legacyExpandedWidth ? Defaults.expandedWidth : storedExpandedWidth
         expandedHeight = Self.read("expandedHeight", Defaults.expandedHeight)
 
         fillet = Self.read("fillet", Defaults.fillet)
@@ -163,8 +174,12 @@ final class IslandSettings: ObservableObject {
         titleFontSize = Self.read("titleFontSize", Defaults.titleFontSize)
         artistFontSize = Self.read("artistFontSize", Defaults.artistFontSize)
 
-        peekWidthGrowth = Self.read("peekWidthGrowth", Defaults.peekWidthGrowth)
-        peekHeightGrowth = Self.read("peekHeightGrowth", Defaults.peekHeightGrowth)
+        // Stored copies of the old defaults follow the new ones, so the card
+        // keeps matching the peek width.
+        let storedPeekWidth = Self.read("peekWidthGrowth", Defaults.peekWidthGrowth)
+        peekWidthGrowth = storedPeekWidth == Defaults.legacyPeekWidthGrowth ? Defaults.peekWidthGrowth : storedPeekWidth
+        let storedPeekHeight = Self.read("peekHeightGrowth", Defaults.peekHeightGrowth)
+        peekHeightGrowth = storedPeekHeight == Defaults.legacyPeekHeightGrowth ? Defaults.peekHeightGrowth : storedPeekHeight
         animationDuration = Self.read("animationDuration", Defaults.animationDuration)
         showShadow = UserDefaults.standard.object(forKey: "showShadow") as? Bool ?? Defaults.showShadow
         idleHeightExtra = Self.read("idleHeightExtra", Defaults.idleHeightExtra)

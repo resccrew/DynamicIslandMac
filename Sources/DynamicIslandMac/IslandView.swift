@@ -156,13 +156,12 @@ struct IslandView: View {
     // MARK: - Collapsed
 
     private var collapsedContent: some View {
-        earsRow {
+        // Paused: the whole row is dimmed (cover and the flat-dot bars alike),
+        // so the pause reads clearly on an island that now stays visible.
+        earsRow(dimmed: !model.isPlaying) {
             artworkView(size: DS.Icon.earSlot)
         } trailing: {
-            // Paused: the bars already lie flat as dots; dim them too so the
-            // pause reads clearly on an island that now stays visible.
             EqualizerView(isPlaying: model.isPlaying, color: model.accent)
-                .opacity(model.isPlaying ? .dsPrimary : .dsDimmed)
         }
     }
 
@@ -183,6 +182,7 @@ struct IslandView: View {
     /// Every ear is `DS.Ear.width` wide whatever it shows, so the island keeps
     /// one width. In peek the ears widen but the content keeps its place.
     private func earsRow<Leading: View, Trailing: View>(
+        dimmed: Bool = false,
         @ViewBuilder leading: () -> Leading,
         @ViewBuilder trailing: () -> Trailing
     ) -> some View {
@@ -203,6 +203,7 @@ struct IslandView: View {
             // Measured before padding and framing: the drawn content itself,
             // which can overflow its ear if it doesn't fit.
             leading()
+                .opacity(dimmed ? .dsDimmed : .dsPrimary)
                 .fixedSize()
                 .scaleEffect(scale, anchor: .leading)
                 .reportsContentFrame("leading")
@@ -210,6 +211,7 @@ struct IslandView: View {
                 .frame(width: ear, alignment: .leading)
             Color.clear.frame(width: notch.width)
             trailing()
+                .opacity(dimmed ? .dsDimmed : .dsPrimary)
                 .fixedSize()
                 .scaleEffect(scale, anchor: .trailing)
                 .reportsContentFrame("trailing")
@@ -226,18 +228,18 @@ struct IslandView: View {
 
     private func callCollapsedContent(_ call: CallInfo) -> some View {
         earsRow {
-            // The app's icon alone; `appIcon` falls back to a phone glyph when
-            // the app has none, so a call never shows two phones.
-            appIcon(call.bundleID, size: DS.Icon.earSlot)
-        } trailing: {
+            // The app's icon (`appIcon` falls back to a phone glyph when it has
+            // none, so a call never shows two phones), then the camera glyph.
+            // The right ear stays the duration alone so a long call keeps clear
+            // of the notch.
             HStack(spacing: DS.Ear.gap) {
+                appIcon(call.bundleID, size: DS.Icon.earSlot)
                 if call.cameraOn {
-                    Image(systemName: "video.fill")
-                        .font(.dsEarSecondary)
-                        .foregroundStyle(Accent.callGreen)
+                    EarSymbol(name: "video.fill", tint: Accent.callGreen)
                 }
-                callEarDuration(call)
             }
+        } trailing: {
+            callEarDuration(call)
         }
     }
 
@@ -291,7 +293,11 @@ struct IslandView: View {
     private func appIcon(_ bundleID: String, size: CGFloat) -> some View {
         Group {
             if let icon = AppIcons.icon(for: bundleID) {
-                Image(nsImage: icon).resizable().aspectRatio(contentMode: .fit)
+                Image(nsImage: icon)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    // Transparent margins make app icons read smaller than art.
+                    .scaleEffect(CollapsedGeometry.appIconScale)
             } else {
                 Image(systemName: "phone.circle.fill")
                     .resizable()
@@ -304,13 +310,13 @@ struct IslandView: View {
     // MARK: - Timer
 
     private var timerCollapsedContent: some View {
-        earsRow {
+        // Paused: the whole row (glyph and digits) is the same orange, dimmed.
+        earsRow(dimmed: model.isTimerPaused) {
             EarSymbol(name: model.isTimerPaused ? "pause.fill" : "timer", tint: Accent.timerOrange)
         } trailing: {
-            // Paused: the same orange, dimmed.
             Text(formatCountdown(model.timerRemaining ?? 0))
                 .font(.dsEar)
-                .foregroundStyle(Accent.timerOrange.opacity(model.isTimerPaused ? .dsDimmed : .dsPrimary))
+                .foregroundStyle(Accent.timerOrange)
                 .fitsEar()
         }
     }
@@ -381,8 +387,11 @@ struct IslandView: View {
 
     /// The ear's value wears the accent of what is on now: Calendar red for
     /// an event, Reminders blue for a reminder.
+    /// An overdue reminder is red, like everywhere else.
     private var agendaEarAccent: Color {
-        model.agenda.nowEvent != nil ? Accent.calendarRed : Accent.remindersBlue
+        if model.agenda.nowEvent != nil { return Accent.calendarRed }
+        if let reminder = model.agenda.nowReminder, isOverdue(reminder) { return Accent.calendarRed }
+        return Accent.remindersBlue
     }
 
     private var agendaCollapsedTime: String {

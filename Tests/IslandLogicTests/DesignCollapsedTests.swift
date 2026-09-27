@@ -27,7 +27,7 @@ final class CollapsedWidthTests: XCTestCase {
     }
 
     func testContentFitsTheEarMinusItsInset() {
-        XCTAssertEqual(CollapsedGeometry.contentWidth, DS.Ear.width - DS.Ear.inset)
+        XCTAssertEqual(CollapsedGeometry.contentWidth, DS.Ear.width - DS.Ear.inset - CollapsedGeometry.notchGap)
     }
 }
 
@@ -164,5 +164,41 @@ final class EarTextTests: XCTestCase {
     func testMostLabelsNeedNoScalingAtAll() {
         XCTAssertLessThanOrEqual(EarText.estimatedWidth("28 мин"), CollapsedGeometry.contentWidth)
         XCTAssertLessThanOrEqual(EarText.estimatedWidth("1:02:05"), CollapsedGeometry.contentWidth)
+    }
+}
+
+final class RoundThreeTests: XCTestCase {
+    private let fillet = DS.Radius.fillet
+
+    func testExpandedCardEqualsPeekWidth() {
+        for notch in [185.0, 190, 210] {
+            let growth = CollapsedGeometry.defaultPeekWidthGrowth
+            let expanded = CollapsedGeometry.expandedWidth(notchWidth: notch, peekGrowth: growth)
+            let peek = CollapsedGeometry.windowWidth(notchWidth: notch, fillet: fillet) + growth
+            XCTAssertEqual(expanded + 2 * fillet, peek)
+        }
+    }
+
+    func testEarContentKeepsSixPointsFromTheNotch() {
+        // Outer inset + content + gap fill exactly the ear.
+        XCTAssertEqual(DS.Ear.inset + CollapsedGeometry.contentWidth + CollapsedGeometry.notchGap, DS.Ear.width)
+        XCTAssertGreaterThanOrEqual(CollapsedGeometry.notchGap, 6)
+    }
+
+    func testLongestCallDurationKeepsTheGap() {
+        // The right ear is the duration alone; the longest realistic call fits
+        // (with the allowed shrink) inside content width, i.e. ≥ 6pt clear.
+        for seconds in [3600.0, 3725, 36000, 86399] {
+            XCTAssertTrue(EarText.fits(FormatTime.clock(seconds)), FormatTime.clock(seconds))
+        }
+    }
+
+    func testCallLeadingGroupFitsWithCamera() {
+        XCTAssertLessThanOrEqual(CollapsedGeometry.callLeadingWidth(cameraOn: true), CollapsedGeometry.contentWidth)
+        XCTAssertEqual(CollapsedGeometry.callLeadingWidth(cameraOn: false), DS.Icon.earSlot)
+    }
+
+    func testAppIconsAreEnlargedSlightly() {
+        XCTAssertEqual(CollapsedGeometry.appIconScale, 1.15)
     }
 }

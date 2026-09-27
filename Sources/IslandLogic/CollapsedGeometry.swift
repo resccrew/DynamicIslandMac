@@ -47,10 +47,31 @@ public enum CollapsedGeometry {
         DS.Ear.inset + max(0, earWidth - DS.Ear.width)
     }
 
-    /// Width available to an ear's content once the inset is taken off the
-    /// collapsed ear.
+    /// Clear space kept between an ear's content and the camera cutout.
+    public static var notchGap: Double { DS.Space.s }
+
+    /// Width available to an ear's content: the collapsed ear minus the outer
+    /// inset and the gap to the notch, so nothing ever touches the camera.
     public static var contentWidth: Double {
-        DS.Ear.width - DS.Ear.inset
+        DS.Ear.width - DS.Ear.inset - notchGap
+    }
+
+    /// Icons of apps (Telegram, Chrome…) carry transparent margins and read
+    /// smaller than cover art of the same frame; they are drawn this much
+    /// larger. Covers are not scaled.
+    public static let appIconScale: Double = 1.15
+
+    /// Width of the call ear's leading group: app icon, and the camera glyph
+    /// beside it when the camera is on. The camera lives on the left so the
+    /// right ear only ever holds the duration, however long the call.
+    public static func callLeadingWidth(cameraOn: Bool) -> Double {
+        cameraOn ? DS.Icon.earSlot + DS.Ear.gap + DS.Icon.earSlot : DS.Icon.earSlot
+    }
+
+    /// Expanded card width (fillets excluded) equal to the peek width, so a
+    /// card does not narrow when it opens: `peek − 2·fillet` = body + growth.
+    public static func expandedWidth(notchWidth: Double, peekGrowth: Double) -> Double {
+        bodyWidth(notchWidth: notchWidth) + peekGrowth
     }
 
     /// Height of the row the ears' content is centred in: the *collapsed*
