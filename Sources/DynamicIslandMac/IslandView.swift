@@ -323,7 +323,7 @@ struct IslandView: View {
         return VStack(alignment: .leading, spacing: DS.Space.sectionGap.pt) {
             SymbolCardHeader(
                 symbolName: model.isTimerPaused ? "pause.fill" : "timer",
-                tint: Self.timerOrange,
+                tint: Self.timerOrange.opacity(model.isTimerPaused ? .dsDimmed : .dsPrimary),
                 title: title
             ) {
                 Text(formatCountdown(model.timerRemaining ?? 0))
@@ -360,7 +360,7 @@ struct IslandView: View {
         case "checklist": return Self.remindersBlue
         case "calendar", "calendar.badge.clock": return Self.calendarRed
         case "timer": return Self.timerOrange
-        default: return model.accent
+        default: return .white.opacity(.dsPrimary)
         }
     }
 
@@ -420,13 +420,14 @@ struct IslandView: View {
                     }
                 }
             } else if let reminder = agenda.nowReminder {
+                let reminderTint = isOverdue(reminder) ? Self.calendarRed : Self.remindersBlue
                 SymbolCardHeader(
                     symbolName: "checklist",
-                    tint: Self.remindersBlue,
+                    tint: reminderTint,
                     title: reminder.title,
                     subtitle: "Напоминание"
                 ) {
-                    CardPrimaryButton(symbol: "checkmark", fill: Self.remindersBlue, help: "Выполнено") {
+                    CardPrimaryButton(symbol: "checkmark", fill: reminderTint, help: "Выполнено") {
                         model.completeReminder(id: reminder.id)
                     }
                 }
@@ -583,7 +584,7 @@ struct IslandView: View {
     /// back so it lines up with the text above it.
     private var controlsRow: some View {
         HStack(spacing: 0) {
-            CardIconButton(symbol: "speaker.wave.2.circle") { AudioOutputs.showPicker() }
+            CardIconButton(symbol: "speaker.wave.2") { AudioOutputs.showPicker() }
             CardIconButton(symbol: "backward.end") { model.skipPrevious() }
             CardPrimaryButton(symbol: model.isPlaying ? "pause.fill" : "play.fill", glyph: .black, fill: .white) {
                 model.togglePlayPause()

@@ -64,3 +64,10 @@ final class GlanceWidthTests: XCTestCase {
         XCTAssertEqual(GlanceActionSymbol.name(for: "что-то новое"), "arrow.up.right")
     }
 }
+
+final class MotionPeriodTests: XCTestCase {
+    func testIndeterminatePeriodIsWholeMicroBeats() {
+        let beats = DS.Motion.indeterminatePeriod / DS.Motion.microDuration
+        XCTAssertEqual(beats, beats.rounded(), accuracy: 1e-9)
+    }
+}

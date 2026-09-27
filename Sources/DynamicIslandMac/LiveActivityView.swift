@@ -99,7 +99,8 @@ struct LiveActivityExpanded: View {
                 symbolName: LiveActivityParts.symbolName(activity),
                 tint: accent,
                 title: activity.title,
-                subtitle: activity.subtitle
+                // A missing subtitle keeps its line, so every state is one height.
+                subtitle: activity.subtitle ?? " "
             ) {
                 if let progress {
                     Text("\(Int((progress * 100).rounded()))%")
@@ -107,7 +108,10 @@ struct LiveActivityExpanded: View {
                         .foregroundStyle(accent)
                 }
             }
-            if activity.state == .running {
+            if activity.state != .running {
+                // Reserved, so success/failure are as tall as a running card.
+                Color.clear.frame(height: DS.Bar.thickness)
+            } else {
                 DSProgressBar(
                     mode: progress.map { .determinate(fraction: $0) } ?? .indeterminate,
                     tint: accent,

@@ -106,7 +106,6 @@ struct DSSpinner: View {
 
     private enum Spin {
         static let arc = 0.28
-        static let period = 0.9
     }
 
     var body: some View {
@@ -120,7 +119,7 @@ struct DSSpinner: View {
         .frame(width: DS.Icon.ring.pt, height: DS.Icon.ring.pt)
         .onAppear {
             guard !reduceMotion else { return }
-            withAnimation(.linear(duration: Spin.period).repeatForever(autoreverses: false)) {
+            withAnimation(.linear(duration: DS.Motion.indeterminatePeriod).repeatForever(autoreverses: false)) {
                 turning = true
             }
         }

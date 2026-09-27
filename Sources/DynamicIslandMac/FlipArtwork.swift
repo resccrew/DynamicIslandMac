@@ -1,4 +1,5 @@
 import SwiftUI
+import IslandLogic
 
 /// Album art that flips when the track changes.
 ///
@@ -19,6 +20,7 @@ struct FlipArtwork: View {
     let size: CGFloat
     var cornerRatio: CGFloat = 0.21
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var shown: NSImage?
     @State private var angle: Double = 0
     /// The track whose flip has already started; a different `trackKey` means
@@ -34,7 +36,7 @@ struct FlipArtwork: View {
     /// Bumped on every flip so callbacks of an interrupted one are ignored.
     @State private var generation = 0
 
-    private static let half = 0.22
+    private static let half = DS.Motion.microDuration
     private static let coverWait = 1.2
 
     var body: some View {
@@ -83,7 +85,7 @@ struct FlipArtwork: View {
 
     private var artwork: some View {
         RoundedRectangle(cornerRadius: size * cornerRatio, style: .continuous)
-            .fill(Color.white.opacity(0.1))
+            .fill(Color.white.opacity(.dsTrack))
             .overlay {
                 if let shown {
                     Image(nsImage: shown)
@@ -104,10 +106,15 @@ struct FlipArtwork: View {
         flippedKey = key
         pendingKey = nil
         target = new
+        // Reduce Motion: no turn, the new cover simply takes its place.
+        guard !reduceMotion else {
+            shown = new
+            return
+        }
         isFlipping = true
         generation += 1
         let current = generation
-        withAnimation(.easeIn(duration: Self.half)) {
+        withAnimation(.dsMicro(reduceMotion: reduceMotion)) {
             angle = 90
         }
 
@@ -116,7 +123,7 @@ struct FlipArtwork: View {
             guard current == generation else { return }
             shown = target
             angle = -90
-            withAnimation(.easeOut(duration: Self.half)) {
+            withAnimation(.dsMicro(reduceMotion: reduceMotion)) {
                 angle = 0
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + Self.half) {

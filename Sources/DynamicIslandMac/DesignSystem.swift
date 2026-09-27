@@ -215,7 +215,7 @@ struct DSProgressBar: View {
                         .offset(x: phase * (geo.size.width * 0.68))
                         .onAppear {
                             guard !reduceMotion else { return }
-                            withAnimation(.linear(duration: 1.1).repeatForever(autoreverses: true)) {
+                            withAnimation(.linear(duration: DS.Motion.indeterminatePeriod).repeatForever(autoreverses: true)) {
                                 phase = 1
                             }
                         }
@@ -233,7 +233,7 @@ struct CapsuleButton: View {
     let title: String
     var systemImage: String? = nil
     var tint: Color = .white
-    var fillOpacity: Double = 0.12
+    var fillOpacity: Double = .dsTrack
     var textOpacity: Double = .dsPrimary
     let action: () -> Void
 
