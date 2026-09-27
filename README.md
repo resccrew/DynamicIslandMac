@@ -1,79 +1,86 @@
 # Dynamic Island for Mac
 
-A menu-bar-notch "island" for macOS: Now Playing for Spotify/Apple Music, a
-matching card on the lock screen with karaoke lyrics, and device-connected
-notices.
+An iOS-style Dynamic Island for your Mac's notch — Now Playing, calls, timers, calendar, and a live-activity API for your own scripts.
 
-No sandboxing, no Developer ID — built to run from source, ad-hoc signed.
+![Now Playing](docs/screenshots/now-playing.png)
 
-## Build & run
+## Status
+
+**Ready to use.** Build it from source and run it — the app is stable in day-to-day use, with a real (if informal) QA process behind it: 177 unit tests plus a debug MCP harness that drives the live UI and checks invariants after every action (see `claude.md`).
+
+Known limitations, honestly:
+- No Developer ID signing — the app is ad-hoc signed at build time, so a downloaded copy (not built locally) would trigger Gatekeeper. Building from source avoids this.
+- The lock-screen overlay relies on the private, undocumented `SkyLightSpace` API and could break on a macOS update.
+- "Like" only works for Apple Music — Spotify doesn't expose a scriptable like without OAuth.
+- The system Clock timer is read-only (from `mobiletimerd`'s log) — you can't pause/cancel it from the island, only from the Clock app.
+- Calls are detected by which process holds the microphone/camera, so a browser tab using the mic for something other than a call (e.g. dictation on a website) can register as a call.
+
+## Features
+
+**Now Playing for any source** — Spotify, Apple Music, and any browser tab playing audio/video (YouTube, SoundCloud, Twitch, etc. in Chrome, Safari, Arc, Firefox, Yandex Browser), plus any other media app. Pages without a cover fall back to the browser/app icon; live streams show "LIVE".
+
+![Now Playing expanded](docs/screenshots/now-playing.png)
+
+**Calls** — detects ongoing calls in Telegram, FaceTime, Zoom, Discord, WhatsApp, Slack, Teams, Skype, Viber, Signal, Webex, or a browser (Meet, etc.) from mic/camera activity. Shows the app, duration, mic/camera state, and an "Open" button.
+
+![Call in progress](docs/screenshots/call.png)
+
+**System Clock timers** — any timer started in the Clock app, by Siri, or by a Shortcut shows up with a live countdown and a "Таймер завершён" (Timer finished) glance when it fires.
+
+![Timer running](docs/screenshots/timer.png)
+
+**Calendar & Reminders** — a heads-up before an event starts, a live "Сейчас: …" card with a join button when the event has a Zoom/Meet/Teams/Telemost/Webex link, and reminders that can be checked off right from the island.
+
+![Upcoming event](docs/screenshots/agenda-event.png)
+![Overdue reminder](docs/screenshots/agenda-reminder.png)
+
+**Live Activity API** — any local script, CI job, or agent can push its own progress into the island over a local HTTP API (see below).
+
+![Script progress](docs/screenshots/live-activity.png)
+
+**Lock screen** — a matching Now Playing card with synced lyrics, drawn over the lock screen.
+
+![Lock screen card](docs/screenshots/lock-screen.png)
+
+**Settings** — five tabs (General, Island, Calendar, Lock Screen, Advanced) to tune behavior: hide on pause, hide in full screen, which display the island lives on, and more.
+
+![Settings](docs/screenshots/settings.png)
+
+## Requirements
+
+- macOS 14 or later
+- Apple Silicon or Intel Mac (the build is universal: arm64 + x86_64)
+- Xcode installed (not just the Command Line Tools — the lock-screen overlay and `symbolEffect` need things the bare CLT toolchain doesn't ship)
+
+## Install
 
 ```sh
+git clone https://github.com/resccrew/DynamicIslandMac.git
+cd DynamicIslandMac
 ./build_app.sh --install
 ```
 
-Builds a release binary, packages it as `Dynamic Island.app`, ad-hoc signs it,
-and installs it into `/Applications`.
+This builds a release binary, packages it as `Dynamic Island.app`, ad-hoc signs it, and installs it into `/Applications`.
 
-Run `./build_app.sh` alone to just build into `./build` without installing.
+Run `./build_app.sh` alone (without `--install`) to just build into `./build` without touching `/Applications`.
 
-Requires Xcode (not just the Command Line Tools) — the lock-screen overlay and
-`symbolEffect` rely on things the bare CLT toolchain doesn't ship.
+**Permissions:** the app doesn't sandbox and asks for access only when a feature needs it:
+- **Automation (Apple Events)** — to control Spotify/Music via AppleScript, used only as a fallback when the system-wide Now Playing path is unavailable.
+- **Calendar** and **Reminders** (full access) — for the calendar/reminders card. Requested once, in that order, only if you use the feature.
 
-**Opening Settings:** there is no menu bar icon by default — open `Dynamic Island.app`
-again (from `/Applications` or Spotlight) and the settings window appears. The icon can be
-turned on in Settings → «Основное» → «Значок в строке меню».
+No microphone or camera permission is requested — call detection reads which *other* process is using the mic/camera, it doesn't capture audio or video itself.
 
-Defaults out of the box: compact island (only on the built-in notched display), light
-lock-screen card, the screen stays awake for 10 minutes on the lock screen, the island stays
-visible on pause and hides in full screen.
+## Usage
 
-## What's inside
+There's no menu bar icon by default — open `Dynamic Island.app` again (from `/Applications` or Spotlight) to bring up the Settings window. A menu bar icon can be turned on in Settings → General → "Значок в строке меню".
 
-- `IslandView` / `IslandWindowController` — the notch-shaped island itself,
-  geometry described in `NotchShape.swift`
-- `LockScreenView` / `LockScreenWindowController` — the Now Playing card drawn
-  over the lock screen via a private window-server space (`SkyLightSpace.swift`)
-- `SystemNowPlaying` / `NowPlayingPoller` — system-wide Now Playing: Spotify, Music,
-  **any browser tab playing video/audio** (YouTube, SoundCloud, Twitch, VK, Яндекс Музыка … in
-  Chrome, Safari, Arc, Firefox, Yandex Browser) and any other media app. Read through the vendored
-  [mediaremote-adapter](https://github.com/ungive/mediaremote-adapter) (BSD-3, `Vendor/`), since
-  macOS 15.4+ only lets Apple-signed processes use MediaRemote; AppleScript to Spotify/Music is the
-  fallback. Pages without a cover show the browser/app icon; live streams show LIVE.
-- `CallMonitor` — ongoing calls in Telegram, FaceTime, Zoom, Discord, WhatsApp, Slack, Teams,
-  Skype, Viber, Signal, Webex or a browser (Meet etc.), detected from which process holds the
-  microphone (CoreAudio) and whether a camera is on (CoreMediaIO). Shows the app, call duration,
-  mic/camera state and an "open" button. Priority in the island:
-  glance > call > calendar/reminder now > timer > media.
-- `SystemTimerMonitor` — the **system Clock (Часы) timer**, started in the Clock app, by Siri or
-  a Shortcut: countdown (1:05:09 past an hour), pause state, title, and a "Таймер завершён" glance
-  when it goes off. Read from `mobiletimerd`'s unified-log entries (`log show` at launch, then
-  `log stream`), since the timer daemon serves only entitled Apple processes; no permissions needed
-  (admin user). Pause/cancel stay in Clock — the card has an "Открыть Часы" button.
-- `AgendaMonitor` — the **system Calendar and Reminders** (every account added to macOS: iCloud,
-  Google, Exchange…) via EventKit, event-driven (`EKEventStoreChanged` + one timer per moment, no
-  polling). A heads-up N minutes before an event (default 5, in settings), «Сейчас: …» at its start
-  with a join button when the event has a Zoom / Meet / Teams / Telemost / Webex link, and a glance
-  with «Выполнено» when a reminder falls due (ticks it off in Reminders). Tap the island, or the
-  menu bar's «Сегодня», for the agenda card: what's on now, the rest of today's events and today's
-  and overdue reminders. All-day and declined events are skipped. macOS asks once for Calendar and
-  Reminders access.
-- Collapsed content (media, timer, call, calendar) sits only in the two "ears" beside the camera notch,
-  never under it; the timer and call widen the island evenly to fit.
-- A paused track keeps the island visible while its source (app or browser tab) is still open;
-  turn on «Скрывать остров на паузе» in the menu bar to hide it on pause instead.
-- External displays: pick the display in «Экран острова»; on screens without a notch the island
-  sits at the top centre.
-- «Прятать при полноэкранном режиме» hides the island while a fullscreen app is in front.
-- `LyricsProvider` — synced lyrics from the open [LRCLIB](https://lrclib.net) API
+Defaults out of the box: compact island (only on the built-in notched display), light lock-screen card, screen stays awake for 10 minutes on the lock screen, island stays visible on pause, and hides in full screen.
 
-## Live Activity API (scripts, CI, agents)
+### Live Activity API (scripts, CI, agents)
 
-Any local script can show its own activity in the island: title, subtitle, SF Symbol,
-progress (0…1 or indeterminate), accent colour, state (`running`/`success`/`failure`) and
-auto-dismiss after it finishes.
+Any local script can show its own activity in the island: title, subtitle, SF Symbol, progress (0…1 or indeterminate), accent color, state (`running`/`success`/`failure`), and auto-dismiss when done.
 
-Install the CLI (bash + curl, nothing else):
+Install the CLI (just bash + curl):
 
 ```sh
 ln -s "$PWD/tools/island" /usr/local/bin/island   # or copy it anywhere on $PATH
@@ -87,48 +94,35 @@ island clear --id build        # or `island clear` for all
 island list
 ```
 
-- Server: `127.0.0.1:47810` only, in release builds too. Toggle: Settings → «Внешний API» (on by default).
-- Auth: `Authorization: Bearer <token>`; the token is generated on first launch in
-  `~/Library/Application Support/DynamicIslandMac/api-token` (mode 600). The CLI passes it via stdin, not argv.
-- Refused: any request with an `Origin` header (web pages), a non-loopback `Host` (DNS rebinding),
-  bodies over 4 KB, more than 5 activities at once.
-- A finished activity goes after `--dismiss` seconds (default 8); a running one nobody updates for 15 min is dropped.
-- Several at once: a just-finished one is shown first, otherwise the running one started last.
+- Server: `127.0.0.1:47810` only, in release builds too. Toggle in Settings → "Внешний API" (on by default).
+- Auth: `Authorization: Bearer <token>`; the token is generated on first launch in `~/Library/Application Support/DynamicIslandMac/api-token` (mode 600). The CLI passes it via stdin, not argv.
+- Refused: any request with an `Origin` header (web pages), a non-loopback `Host` (DNS rebinding), bodies over 4 KB, more than 5 activities at once.
+- A finished activity is removed after `--dismiss` seconds (default 8); a running one nobody updates for 15 minutes is dropped.
 - Island priority: glance > call > agenda > **activity** > timer > media.
 
-Raw HTTP: `POST /v1/activity` `{"id","title","subtitle","symbol","progress","color":"#RRGGBB","state","dismiss"}`,
-`POST /v1/clear` `{"id"}` (or `{}`), `GET /v1/activities`.
+Raw HTTP: `POST /v1/activity` `{"id","title","subtitle","symbol","progress","color":"#RRGGBB","state","dismiss"}`, `POST /v1/clear` `{"id"}` (or `{}`), `GET /v1/activities`.
 
-## QA / debug MCP
+## What's inside
 
-Debug builds (`./build_app.sh debug`) start a local control server on `127.0.0.1:47800`
-(`DebugControlServer.swift`, compiled only under `#if DEBUG` — release builds don't contain it).
-The `mcp/` folder is an MCP server that lets Claude drive and check the running app:
-read state, inject a fake track, call or agenda (events/reminders — the user's real ones stay
-untouched), send play/pause/next through the real source, press a glance's button,
-simulate hover/tap/glance/system timer (seconds/paused/title/fire)/lock-screen preview,
-screenshot the island (including bursts for animations), and check invariants.
+- `IslandView` / `IslandWindowController` — the notch-shaped island itself, geometry in `NotchShape.swift`
+- `LockScreenView` / `LockScreenWindowController` — the Now Playing card over the lock screen (`SkyLightSpace.swift`)
+- `SystemNowPlaying` / `NowPlayingPoller` — system-wide Now Playing via the vendored [mediaremote-adapter](https://github.com/ungive/mediaremote-adapter) (BSD-3, `Vendor/`), since macOS 15.4+ restricts `MediaRemote` to Apple-signed processes; AppleScript to Spotify/Music is the fallback
+- `CallMonitor` — call detection from CoreAudio (mic) and CoreMediaIO (camera)
+- `SystemTimerMonitor` — reads the system Clock timer from `mobiletimerd`'s unified-log entries
+- `AgendaMonitor` — calendar events and reminders via EventKit, event-driven (no polling)
+- `LiveActivityServer` / `tools/island` — the local HTTP API and its CLI
+- `LyricsProvider` — synced lyrics from the open [LRCLIB](https://lrclib.net) API
+- `mcp/` — a debug MCP server used to drive and QA the live app (see `claude.md`)
+
+## Development
 
 ```sh
-cd mcp && uv run pytest -q                      # MCP tests
-claude mcp add --scope user island -- uv --directory /path/to/DynamicIslandMac/mcp run island-mcp
+swift build      # build
+swift test        # 177 unit tests (IslandGeometry + IslandLogic)
 ```
 
-## Known limitations
+Project architecture, coding rules, and known risks are documented in `claude.md`.
 
-- Liking a track only works in Apple Music. Spotify exposes "starred"
-  read-only over AppleScript and has no scriptable "like" command; doing it
-  for real needs Spotify's Web API with a user's own OAuth login, which isn't
-  wired up here.
-- No code signing certificate, so macOS will show a Gatekeeper warning on a
-  freshly downloaded copy. Building from source avoids that entirely (a
-  locally-built binary isn't quarantined).
-- Call detection sees microphone use, not the call itself: a browser tab using the mic counts
-  as a call, and muting inside the app isn't visible.
-- System Now Playing depends on `/usr/bin/perl` and the private MediaRemote framework; if a macOS
-  update breaks it, the app falls back to AppleScript (Spotify/Music only).
-- The lock-screen overlay and the Bluetooth-battery/model lookup lean on
-  private window-server behaviour and Apple's own `system_profiler`,
-  respectively — both are what's actually available for this kind of feature
-  without a paid Developer ID, but neither is a documented public API and
-  either could change with a macOS update.
+## License
+
+No license file is included yet — all rights reserved by default. The vendored `Vendor/mediaremote-adapter` is BSD-3-licensed; see `Vendor/mediaremote-adapter/LICENSE`.

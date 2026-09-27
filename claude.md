@@ -435,6 +435,20 @@ fire date раз в 0.25с (не декремент — не дрейфует), 
 - Дочерние процессы (perl-адаптер, `log stream`) запускаются через `ChildGuard` (lifeline-pipe) и гасятся на SIGTERM/крэше —
   не запускать их напрямую через Process.
 
+## Приведение репозитория в порядок для посетителей GitHub (2026-09-27)
+- Аудит `git ls-files` (117 файлов) не нашёл мусора в git — `.build/`, `build/`, `.DS_Store` и т.п.
+  уже корректно в `.gitignore` и не трекались; удалять из git было нечего.
+- README.md переписан на английском: hero-скриншот, Features с 7 скриншотами (Now Playing, звонок,
+  таймер, календарь/напоминание, Live Activity, лок-скрин, настройки), Requirements/Install/Usage,
+  статус «ready to use» с честными known limitations, секция Development (`swift build`/`swift test`).
+  Скриншоты — 8 файлов в `docs/screenshots/` (взято из `~/DynamicIslandMac-design/gallery-final/`,
+  вся галерея туда не копировалась).
+- `swift build -c debug` и `swift test` зелёные: 177 тестов (151 IslandLogicTests + 26 IslandGeometryTests).
+- Секретов/токенов в репозитории нет — Live Activity API токен генерируется в рантайме в
+  `~/Library/Application Support/DynamicIslandMac/api-token`, в git не попадает.
+- LICENSE-файла в репозитории нет — README отмечает это честно (all rights reserved by default),
+  кроме вендорного `Vendor/mediaremote-adapter` (BSD-3, есть свой LICENSE).
+
 ## Зоны ответственности агентов в этом проекте
 - **Planner** — приоритизация находок аудита, разбивка на фичи/фиксы.
 - **Implementer** — фикс регресса в `IslandViewModel`, подключение или удаление мёртвого кода
