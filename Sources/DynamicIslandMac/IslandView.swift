@@ -573,8 +573,6 @@ struct IslandView: View {
 
                     controlsRow
                 }
-
-                Spacer(minLength: 0)
             }
 
             progressRow
@@ -618,19 +616,25 @@ struct IslandView: View {
 
     private func formatTime(_ seconds: Double) -> String { FormatTime.clock(seconds) }
 
-    /// Transport row: 28pt hit-frames edge to edge, the first glyph pulled
-    /// back so it lines up with the text above it.
+    /// Transport row: spread across the full card width (same right edge as
+    /// the progress bar below), the first glyph pulled back so it lines up
+    /// with the text above it.
     private var controlsRow: some View {
         HStack(spacing: 0) {
             CardIconButton(symbol: "speaker.wave.2") { AudioOutputs.showPicker() }
+            Spacer(minLength: 0)
             CardIconButton(symbol: "backward.end") { model.skipPrevious() }
+            Spacer(minLength: 0)
             CardPrimaryButton(symbol: model.isPlaying ? "pause.fill" : "play.fill", glyph: .black, fill: .white) {
                 model.togglePlayPause()
             }
+            Spacer(minLength: 0)
             CardIconButton(symbol: "forward.end") { model.skipNext() }
+            Spacer(minLength: 0)
             CardIconButton(symbol: "arrow.up.forward.app") { model.openPlayer() }
         }
         .padding(.leading, -((DS.Button.secondaryHitFrame - DS.Button.secondaryIconMin) / 2).pt)
+        .frame(maxWidth: .infinity)
     }
 
     private func artworkView(size: CGFloat) -> some View {
