@@ -20,6 +20,14 @@ Run `./build_app.sh` alone to just build into `./build` without installing.
 Requires Xcode (not just the Command Line Tools) — the lock-screen overlay and
 `symbolEffect` rely on things the bare CLT toolchain doesn't ship.
 
+**Opening Settings:** there is no menu bar icon by default — open `Dynamic Island.app`
+again (from `/Applications` or Spotlight) and the settings window appears. The icon can be
+turned on in Settings → «Основное» → «Значок в строке меню».
+
+Defaults out of the box: compact island (only on the built-in notched display), light
+lock-screen card, the screen stays awake for 10 minutes on the lock screen, the island stays
+visible on pause and hides in full screen.
+
 ## What's inside
 
 - `IslandView` / `IslandWindowController` — the notch-shaped island itself,

@@ -98,7 +98,8 @@ final class IslandSettings: ObservableObject {
         static let collapsedWidth = 280.0
         static let collapsedHeight = 38.0
         /// Equals the peek width on the reference (virtual) notch: 190 + 128 + 16.
-        static let earWidth = DS.Ear.width
+        /// «Компактный» size preset.
+        static let earWidth = 48.0
         static let expandedWidth = CollapsedGeometry.expandedWidth(
             notchWidth: DisplayGeometry.virtualNotchWidth,
             peekGrowth: CollapsedGeometry.defaultPeekWidthGrowth,
@@ -139,15 +140,15 @@ final class IslandSettings: ObservableObject {
         static let lockScreenArtSize = 360.0
         /// Below centre, so the card sits just above the avatar and password field.
         static let lockScreenOffsetY = 230.0
-        static let lockCardLightTheme = false
+        static let lockCardLightTheme = true
         static let lyricsEnabled = true
         /// Off until the user turns them on: the system asks for access at that moment, not at launch.
         static let calendarEnabled = false
         static let remindersEnabled = false
         static let eventLeadMinutes = 5.0
-        static let preventSleepOnLock = false
+        static let preventSleepOnLock = true
         static let preventSleepMinutes = 10.0
-        static let showStatusIcon = true
+        static let showStatusIcon = false
         static let hideWhenPaused = false
         static let hideInFullScreen = true
         static let allowExternalAPI = true
