@@ -1,6 +1,7 @@
 import AppKit
 import CoreAudio
 import CoreMediaIO
+import IslandLogic
 
 /// An ongoing call: some known calling app has held the microphone open.
 struct CallInfo: Equatable {
@@ -130,11 +131,10 @@ final class CallMonitor {
     }
 
     static func appName(_ bundleID: String) -> String {
-        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else {
-            return bundleID.split(separator: ".").last.map(String.init) ?? bundleID
+        let installed = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID).map {
+            FileManager.default.displayName(atPath: $0.path).replacingOccurrences(of: ".app", with: "")
         }
-        return FileManager.default.displayName(atPath: url.path)
-            .replacingOccurrences(of: ".app", with: "")
+        return AppDisplayName.resolve(bundleID: bundleID, localized: installed)
     }
 
     // MARK: - CoreAudio

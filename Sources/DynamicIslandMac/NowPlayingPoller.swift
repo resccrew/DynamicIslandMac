@@ -308,6 +308,12 @@ final class NowPlayingPoller {
         }
     }
 
+    /// Stops the adapter before the app exits.
+    func shutdown() {
+        timer?.invalidate()
+        system?.stopAndWait()
+    }
+
     deinit {
         timer?.invalidate()
         system?.stop()
