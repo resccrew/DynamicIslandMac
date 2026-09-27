@@ -95,7 +95,7 @@ final class DesignTokensTests: XCTestCase {
     // MARK: - Icons
 
     func testIconSizesBelongToTheAllowedSet() {
-        let allowed: Set<Double> = [11, 12, 13, 14, 22, 30, 54]
+        let allowed: Set<Double> = [11, 14, 20, 22, 30, 54]  // DESIGN-DECISIONS «Иконки»
         let used: [Double] = [
             DS.Icon.earSlot, DS.Icon.earSymbol, DS.Icon.earSecondary,
             DS.Icon.ring, DS.Icon.eqBarHeight,
