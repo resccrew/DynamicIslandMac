@@ -45,6 +45,7 @@ struct CardPrimaryButton: View {
         }
         .buttonStyle(MediaButtonStyle(diameter: DS.Button.primary.pt, tint: fill))
         .help(help ?? "")
+        .accessibilityLabel(help ?? "")
     }
 }
 

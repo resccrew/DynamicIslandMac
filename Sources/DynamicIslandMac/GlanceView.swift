@@ -34,7 +34,13 @@ struct GlanceView: View {
                 .scaleEffect(iconIn || reduceMotion ? 1 : Stage.iconScale)
         } trailing: {
             if let actionLabel {
-                CapsuleButton(title: actionLabel, tint: accent, action: onAction)
+                CardPrimaryButton(
+                    symbol: GlanceActionSymbol.name(for: actionLabel),
+                    fill: accent,
+                    help: actionLabel,
+                    action: onAction
+                )
+                .layoutPriority(1)
             }
         }
         .opacity(textIn ? 1 : 0)

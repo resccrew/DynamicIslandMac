@@ -45,3 +45,22 @@ final class DesignCardsTests: XCTestCase {
         XCTAssertEqual(body, 50)
     }
 }
+
+final class GlanceWidthTests: XCTestCase {
+    private let glanceWidth = 306.0
+    private let minimumTextWidth = 125.0
+
+    func testTextKeepsRoomBesideTheRoundActionButton() {
+        let beforeButton = glanceWidth - 2 * DS.Space.cardSide - DS.Card.headerIconColumn - DS.Space.leadGap
+        let room = beforeButton - DS.Space.leadGap - DS.Button.primary
+        XCTAssertGreaterThanOrEqual(room, minimumTextWidth)
+    }
+
+    func testActionSymbols() {
+        XCTAssertEqual(GlanceActionSymbol.name(for: "Подключиться"), "video.fill")
+        XCTAssertEqual(GlanceActionSymbol.name(for: "Выполнено"), "checkmark")
+        XCTAssertEqual(GlanceActionSymbol.name(for: "Открыть Часы"), "clock")
+        XCTAssertEqual(GlanceActionSymbol.name(for: "Открыть"), "arrow.up.right")
+        XCTAssertEqual(GlanceActionSymbol.name(for: "что-то новое"), "arrow.up.right")
+    }
+}
