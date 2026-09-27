@@ -5,6 +5,7 @@ import IslandLogic
 struct IslandView: View {
     @ObservedObject var model: IslandViewModel
     @ObservedObject var settings: IslandSettings
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(spacing: 0) {
@@ -17,14 +18,14 @@ struct IslandView: View {
                 // curve — independent of that spring — makes it read as the
                 // island dissolving instead of the shape just shrinking.
                 .opacity(IslandVisibility.opacity(isHidden: model.state == .hidden))
-                .animation(.easeOut(duration: 0.35), value: model.state == .hidden)
+                .animation(.dsFade(reduceMotion: reduceMotion), value: model.state == .hidden)
                 .onHover { hovering in
                     model.hover(hovering)
                 }
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .animation(openAnimation, value: model.state)
+        .animation(stateAnimation, value: model.state)
     }
 
     /// Anchored to the top of a fixed-size panel, so growing downward never
@@ -122,80 +123,82 @@ struct IslandView: View {
         .drawingGroup()
     }
 
-    /// Fast and smooth: a short, well-damped spring so it settles without
-    /// overshoot ringing. Duration is tunable from the settings panel.
-    private var openAnimation: Animation {
-        .spring(response: settings.animationDuration, dampingFraction: 0.86)
+    /// Every state change: the design system's `state` spring, at the speed
+    /// chosen in the settings, softened to a fade under Reduce Motion.
+    private var stateAnimation: Animation {
+        .ds(.spring(response: settings.animationDuration, damping: DS.Motion.stateDamping), reduceMotion: reduceMotion)
     }
 
     /// Hangs from the top edge of the display and blends into it, the way the
-    /// hardware notch does.
+    /// hardware notch does. One squircle exponent for every state.
     private var shape: NotchShape {
-        // Idle also needs its own, much tighter corner: the real notch's
-        // bottom corners are far less rounded than the collapsed pill's,
-        // and reusing collapsedBottomRadius there leaves the actual
-        // hardware notch peeking out past our softer curve.
-        let bottomRadius: CGFloat = model.isExpanded
-            ? settings.expandedBottomRadius
-            : model.state == .hidden
-                ? settings.idleBottomRadius
-                : settings.collapsedBottomRadius
-
-        return NotchShape(
+        NotchShape(
             // Same concave flare on every visible state, expanded included —
             // the card grows out of the screen edge the way the collapsed
-            // pill already does, instead of reading as a separate floating
-            // box with its own rounded top.
+            // pill already does, instead of reading as a separate floating box.
             topFillet: model.state == .hidden ? 0 : settings.fillet,
             bottomRadius: bottomRadius,
-            // The squircle exponent tuned for the collapsed pill's large
-            // radius reads as an almost-square chamfer at idle's tiny
-            // radius. When expanded, we use a perfectly circular exponent (2.2)
-            // on ALL corners so it looks like a smooth pill, not a box.
-            bottomExponent: model.state == .hidden ? settings.topExponent : (model.isExpanded ? settings.topExponent : settings.bottomExponent),
-            topExponent: settings.topExponent,
-            // Every visible state keeps the flush notch-continuation look —
-            // expanded no longer breaks from it with an ordinary rounded top.
             topIsConvex: false
         )
+    }
+
+    /// Collapsed and peek round their bottom to exactly half their height;
+    /// idle keeps the tight corner of the hardware notch, cards their own.
+    private var bottomRadius: CGFloat {
+        if model.isExpanded { return DS.Radius.expandedBottom }
+        switch model.state {
+        case .hidden: return DS.Radius.idle
+        case .collapsed, .peek: return CollapsedGeometry.bottomRadius(collapsedLike: islandSize.height)
+        case .expanded, .glance: return DS.Radius.expandedBottom
+        }
     }
 
     // MARK: - Collapsed
 
     private var collapsedContent: some View {
         earsRow {
-            artworkView(size: settings.collapsedArtwork)
+            artworkView(size: DS.Icon.earSlot)
         } trailing: {
             // Paused: the bars already lie flat as dots; dim them too so the
             // pause reads clearly on an island that now stays visible.
-            EqualizerView(
-                isPlaying: model.isPlaying,
-                color: model.accent,
-                barWidth: 2,
-                maxHeight: 12
-            )
-            .opacity(model.isPlaying ? 1 : 0.45)
+            EqualizerView(isPlaying: model.isPlaying, color: model.accent)
+                .opacity(model.isPlaying ? .dsPrimary : .dsDimmed)
         }
+    }
+
+    /// The collapsed silhouette's height. Ears are centred in this row in
+    /// collapsed *and* peek, so peek growing below it never moves the content.
+    private var collapsedRowHeight: CGFloat {
+        CGFloat(CollapsedGeometry.contentRowHeight(
+            collapsedHeight: settings.islandSize(
+                state: .collapsed, hasContent: true, notch: model.notchSize, hasNotch: model.hasNotch
+            ).height
+        ))
     }
 
     /// Collapsed content lives only in the two ears beside the camera: the
     /// notch-wide middle stays empty, since whatever is drawn there is hidden
     /// by the hardware (and screenshots don't show it, so it goes unnoticed).
+    ///
+    /// Every ear is `DS.Ear.width` wide whatever it shows, so the island keeps
+    /// one width. In peek the ears widen but the content keeps its place.
     private func earsRow<Leading: View, Trailing: View>(
         @ViewBuilder leading: () -> Leading,
         @ViewBuilder trailing: () -> Trailing
     ) -> some View {
         let notch = model.notchSize
-        let body = islandSize.width - settings.fillet * 2
-        let ear = max(0, (body - notch.width) / 2)
-        let rowHeight = min(islandSize.height, notch.height)
+        let ear = CollapsedGeometry.earWidth(
+            islandWidth: islandSize.width, fillet: settings.fillet, notchWidth: notch.width
+        )
+        let rowHeight = collapsedRowHeight
         // A menu-bar-high island (no hardware notch) can be shorter than the
-        // artwork; shrink the ears' content and paddings to fit, centred.
+        // ear slot; shrink the ears' content and inset to fit, centred.
         let scale = DisplayGeometry.collapsedContentScale(
             rowHeight: rowHeight,
-            contentHeight: settings.collapsedArtwork
+            contentHeight: DS.Icon.earSlot,
+            inset: DS.Space.xxs
         )
-        let padding = settings.collapsedPadding * scale
+        let inset = CollapsedGeometry.contentInset(earWidth: ear) * scale
         return HStack(spacing: 0) {
             // Measured before padding and framing: the drawn content itself,
             // which can overflow its ear if it doesn't fit.
@@ -203,14 +206,14 @@ struct IslandView: View {
                 .fixedSize()
                 .scaleEffect(scale, anchor: .leading)
                 .reportsContentFrame("leading")
-                .padding(.leading, padding)
+                .padding(.leading, inset)
                 .frame(width: ear, alignment: .leading)
             Color.clear.frame(width: notch.width)
             trailing()
                 .fixedSize()
                 .scaleEffect(scale, anchor: .trailing)
                 .reportsContentFrame("trailing")
-                .padding(.trailing, padding)
+                .padding(.trailing, inset)
                 .frame(width: ear, alignment: .trailing)
         }
         .frame(height: rowHeight)
@@ -223,21 +226,28 @@ struct IslandView: View {
 
     private func callCollapsedContent(_ call: CallInfo) -> some View {
         earsRow {
-            HStack(spacing: 6) {
-                appIcon(call.bundleID, size: settings.collapsedArtwork - 4)
-                Image(systemName: "phone.fill")
-                    .font(.dsCaption)
-                    .foregroundStyle(Self.callGreen)
-            }
+            // The app's icon alone; `appIcon` falls back to a phone glyph when
+            // the app has none, so a call never shows two phones.
+            appIcon(call.bundleID, size: DS.Icon.earSlot)
         } trailing: {
-            HStack(spacing: 5) {
+            HStack(spacing: DS.Ear.gap) {
                 if call.cameraOn {
                     Image(systemName: "video.fill")
-                        .font(.dsCaption)
-                        .foregroundStyle(Self.callGreen)
+                        .font(.dsEarSecondary)
+                        .foregroundStyle(Accent.callGreen)
                 }
-                callDuration(call, size: 13)
+                callEarDuration(call)
             }
+        }
+    }
+
+    /// Ticks on its own, like `callDuration`, in the shared ear font.
+    private func callEarDuration(_ call: CallInfo) -> some View {
+        TimelineView(.periodic(from: call.startedAt, by: 1)) { context in
+            Text(formatTime(context.date.timeIntervalSince(call.startedAt)))
+                .font(.dsEar)
+                .foregroundStyle(Accent.callGreen)
+                .fitsEar()
         }
     }
 
@@ -312,15 +322,13 @@ struct IslandView: View {
 
     private var timerCollapsedContent: some View {
         earsRow {
-            Image(systemName: model.isTimerPaused ? "pause.fill" : "timer")
-                .font(.dsEar)
-                .foregroundStyle(Self.timerOrange)
+            EarSymbol(name: model.isTimerPaused ? "pause.fill" : "timer", tint: Accent.timerOrange)
         } trailing: {
+            // Paused: the same orange, dimmed.
             Text(formatCountdown(model.timerRemaining ?? 0))
                 .font(.dsEar)
-                .foregroundColor(model.isTimerPaused ? .white.opacity(DS.Opacity.secondary) : Self.timerOrange)
-                .monospacedDigit()
-                .lineLimit(1)
+                .foregroundStyle(Accent.timerOrange.opacity(model.isTimerPaused ? .dsDimmed : .dsPrimary))
+                .fitsEar()
         }
     }
 
@@ -382,16 +390,23 @@ struct IslandView: View {
 
     private var agendaCollapsedContent: some View {
         earsRow {
-            Image(systemName: model.agenda.nowEvent != nil ? "calendar" : "checklist")
-                .font(.dsEar)
-                .foregroundStyle(model.agenda.nowEvent != nil ? Self.calendarRed : Self.remindersBlue)
+            EarSymbol(name: agendaEarSymbol, tint: agendaEarAccent)
         } trailing: {
             Text(agendaCollapsedTime)
                 .font(.dsEar)
-                .foregroundColor(.white)
-                .monospacedDigit()
-                .lineLimit(1)
+                .foregroundStyle(agendaEarAccent)
+                .fitsEar()
         }
+    }
+
+    private var agendaEarSymbol: String {
+        model.agenda.nowEvent != nil ? "calendar" : "checklist"
+    }
+
+    /// The ear's value wears the accent of what is on now: Calendar red for
+    /// an event, Reminders blue for a reminder.
+    private var agendaEarAccent: Color {
+        model.agenda.nowEvent != nil ? Accent.calendarRed : Accent.remindersBlue
     }
 
     private var agendaCollapsedTime: String {

@@ -624,13 +624,6 @@ extension IslandViewModel {
         case .expanded:
             guard glanceTitle == nil, let height = expandedContentHeight else { return size }
             return CGSize(width: size.width, height: height)
-        case .collapsed, .peek:
-            // A countdown or call duration is wider than the ear beside the
-            // camera at the media width; widen both ears evenly rather than
-            // let it slide under the notch.
-            guard content == .timer || content == .call || content == .agenda || content == .activity else { return size }
-            let wide = settings.wideEarsWidth(notch: notch, peek: state == .peek)
-            return CGSize(width: max(size.width, wide), height: size.height)
         default:
             return size
         }
