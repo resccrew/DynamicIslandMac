@@ -20,7 +20,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var debugServer: DebugControlServer?
     #endif
 
+    /// `pkill`, `kill` and Ctrl-C arrive as signals, which would end the app
+    /// without running `applicationWillTerminate`. Routing them through
+    /// `NSApp.terminate` makes the helpers shut down cleanly first. (A
+    /// `SIGKILL` or crash can't be caught; `ChildGuard` covers those.)
+    private var signalSources: [DispatchSourceSignal] = []
+
+    private func routeTerminationSignals() {
+        for number in [SIGTERM, SIGINT, SIGHUP] {
+            signal(number, SIG_IGN)
+            let source = DispatchSource.makeSignalSource(signal: number, queue: .main)
+            source.setEventHandler { NSApp.terminate(nil) }
+            source.resume()
+            signalSources.append(source)
+        }
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        poller.shutdown()
+        systemTimers.stopAndWait()
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
+        routeTerminationSignals()
         // The controller shows and hides the panel itself, following whether
         // there is anything playing.
         islandController = IslandWindowController(model: model)
