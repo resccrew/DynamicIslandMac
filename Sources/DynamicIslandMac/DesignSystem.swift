@@ -193,6 +193,8 @@ struct DSProgressBar: View {
     var tint: Color
     var paused: Bool = false
     var reduceMotion: Bool = false
+    /// The bar's empty track; white by default, black-on-light for the light lock card.
+    var trackColor: Color = Color.white.opacity(.dsTrack)
 
     @State private var phase: CGFloat = 0
 
@@ -200,7 +202,7 @@ struct DSProgressBar: View {
         GeometryReader { geo in
             ZStack(alignment: .leading) {
                 Capsule()
-                    .fill(Color.white.opacity(.dsTrack))
+                    .fill(trackColor)
                 switch mode {
                 case let .determinate(fraction):
                     Capsule()

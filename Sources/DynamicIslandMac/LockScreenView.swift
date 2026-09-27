@@ -176,20 +176,13 @@ struct LockScreenView: View {
         }
     }
 
-    /// `DSProgressBar` draws a white track; on the light card the whole bar is
-    /// inverted to black (same alpha), so both themes use the one component.
-    @ViewBuilder
     private var progressBar: some View {
-        let bar = DSProgressBar(
+        DSProgressBar(
             mode: .determinate(fraction: progressFraction),
-            tint: .white,
-            reduceMotion: reduceMotion
+            tint: palette.tint,
+            reduceMotion: reduceMotion,
+            trackColor: palette.tint.opacity(DS.Opacity.track)
         )
-        if settings.lockCardLightTheme {
-            bar.colorInvert()
-        } else {
-            bar
-        }
     }
 
     // MARK: - Expanded artwork
