@@ -2,7 +2,10 @@
 
 An iOS-style Dynamic Island for your Mac's notch — Now Playing, calls, timers, calendar, and a live-activity API for your own scripts.
 
-![Now Playing](docs/screenshots/now-playing.png)
+![Now Playing, expanded](docs/screenshots/now-playing.png)
+
+All screenshots below are live captures of the app running on this Mac (real Spotify track, real
+lock-screen overlay, real Settings window) — not mockups.
 
 ## Status
 
@@ -19,26 +22,24 @@ Known limitations, honestly:
 
 **Now Playing for any source** — Spotify, Apple Music, and any browser tab playing audio/video (YouTube, SoundCloud, Twitch, etc. in Chrome, Safari, Arc, Firefox, Yandex Browser), plus any other media app. Pages without a cover fall back to the browser/app icon; live streams show "LIVE".
 
-![Now Playing expanded](docs/screenshots/now-playing.png)
+Collapsed (just the ears beside the notch) and peek (on hover):
+
+![Now Playing, collapsed](docs/screenshots/now-playing-collapsed.png)
+![Now Playing, peek](docs/screenshots/now-playing-peek.png)
+
+Tap to expand into the full card:
+
+![Now Playing, expanded](docs/screenshots/now-playing.png)
 
 **Calls** — detects ongoing calls in Telegram, FaceTime, Zoom, Discord, WhatsApp, Slack, Teams, Skype, Viber, Signal, Webex, or a browser (Meet, etc.) from mic/camera activity. Shows the app, duration, mic/camera state, and an "Open" button.
 
-![Call in progress](docs/screenshots/call.png)
-
 **System Clock timers** — any timer started in the Clock app, by Siri, or by a Shortcut shows up with a live countdown and a "Таймер завершён" (Timer finished) glance when it fires.
-
-![Timer running](docs/screenshots/timer.png)
 
 **Calendar & Reminders** — a heads-up before an event starts, a live "Сейчас: …" card with a join button when the event has a Zoom/Meet/Teams/Telemost/Webex link, and reminders that can be checked off right from the island.
 
-![Upcoming event](docs/screenshots/agenda-event.png)
-![Overdue reminder](docs/screenshots/agenda-reminder.png)
-
 **Live Activity API** — any local script, CI job, or agent can push its own progress into the island over a local HTTP API (see below).
 
-![Script progress](docs/screenshots/live-activity.png)
-
-**Lock screen** — a matching Now Playing card with synced lyrics, drawn over the lock screen.
+**Lock screen** — a matching Now Playing card with synced lyrics (when found), drawn over the lock screen.
 
 ![Lock screen card](docs/screenshots/lock-screen.png)
 
