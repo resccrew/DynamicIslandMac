@@ -444,33 +444,47 @@ struct IslandView: View {
                 SymbolCardHeader(symbolName: "calendar", tint: Self.calendarRed, title: "Сегодня")
             }
 
-            VStack(alignment: .leading, spacing: DS.Space.rowGap.pt) {
-                ForEach(Array(laterEvents), id: \.id) { event in
-                    agendaRow(
-                        lead: Image(systemName: "calendar")
-                            .font(.dsBody)
-                            .foregroundStyle(Self.calendarRed),
-                        title: event.title,
-                        titleColor: .white.opacity(.dsPrimary),
-                        time: IslandViewModel.clock(event.start)
-                    )
+            // Sections are sectionGap apart, rows inside a section rowGap.
+            if !laterEvents.isEmpty {
+                VStack(alignment: .leading, spacing: DS.Space.rowGap.pt) {
+                    ForEach(Array(laterEvents), id: \.id) { event in
+                        agendaRow(
+                            lead: Image(systemName: "calendar")
+                                .font(.dsBody)
+                                .foregroundStyle(Self.calendarRed),
+                            title: event.title,
+                            titleColor: .white.opacity(.dsPrimary),
+                            time: IslandViewModel.clock(event.start)
+                        )
+                    }
                 }
-                ForEach(Array(reminders), id: \.id) { reminder in
-                    agendaRow(
-                        lead: CardIconButton(symbol: "circle", opacity: .dsPrimary, tint: Self.remindersBlue, help: "Выполнено") {
-                            model.completeReminder(id: reminder.id)
-                        },
-                        title: reminder.title,
-                        titleColor: isOverdue(reminder) ? Self.calendarRed : .white.opacity(.dsPrimary),
-                        time: reminder.due.map { IslandViewModel.clock($0) }
-                    )
+            }
+            if !reminders.isEmpty {
+                VStack(alignment: .leading, spacing: DS.Space.rowGap.pt) {
+                    // Only worth a label when it tells two sections apart.
+                    if !laterEvents.isEmpty {
+                        Text("Напоминания")
+                            .font(.dsCaption)
+                            .foregroundColor(.white.opacity(.dsTertiary))
+                            .padding(.leading, agendaTextInset)
+                    }
+                    ForEach(Array(reminders), id: \.id) { reminder in
+                        agendaRow(
+                            lead: CardIconButton(symbol: "circle", opacity: .dsPrimary, tint: Self.remindersBlue, help: "Выполнено") {
+                                model.completeReminder(id: reminder.id)
+                            },
+                            title: reminder.title,
+                            titleColor: isOverdue(reminder) ? Self.calendarRed : .white.opacity(.dsPrimary),
+                            time: reminder.due.map { IslandViewModel.clock($0) }
+                        )
+                    }
                 }
-                if laterEvents.isEmpty && reminders.isEmpty {
-                    Text("На сегодня больше ничего")
-                        .font(.dsBody)
-                        .foregroundColor(.white.opacity(.dsTertiary))
-                        .padding(.leading, agendaTextInset)
-                }
+            }
+            if laterEvents.isEmpty && reminders.isEmpty {
+                Text("На сегодня больше ничего")
+                    .font(.dsBody)
+                    .foregroundColor(.white.opacity(.dsTertiary))
+                    .padding(.leading, agendaTextInset)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -481,6 +495,10 @@ struct IslandView: View {
         static let events = 3
         static let reminders = 3
     }
+
+    /// Every list row is this tall — the 28pt reminder button overflows it —
+    /// so gaps between rows read the same whatever a row holds.
+    private var agendaRowHeight: CGFloat { DS.Space.xl.pt }
 
     /// Where a `SymbolCardHeader`'s text starts: past its icon column.
     private var agendaTextInset: CGFloat { (DS.Card.headerIconColumn + DS.Space.leadGap).pt }
@@ -506,6 +524,7 @@ struct IslandView: View {
                     .foregroundColor(.white.opacity(.dsSecondary))
             }
         }
+        .frame(height: agendaRowHeight)
     }
 
     private func isOverdue(_ reminder: AgendaReminder) -> Bool {
