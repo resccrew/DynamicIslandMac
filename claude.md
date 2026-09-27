@@ -446,8 +446,9 @@ fire date раз в 0.25с (не декремент — не дрейфует), 
 - `swift build -c debug` и `swift test` зелёные: 177 тестов (151 IslandLogicTests + 26 IslandGeometryTests).
 - Секретов/токенов в репозитории нет — Live Activity API токен генерируется в рантайме в
   `~/Library/Application Support/DynamicIslandMac/api-token`, в git не попадает.
-- LICENSE-файла в репозитории нет — README отмечает это честно (all rights reserved by default),
-  кроме вендорного `Vendor/mediaremote-adapter` (BSD-3, есть свой LICENSE).
+- **(2026-09-27, обновлено)** Добавлена лицензия MIT (`LICENSE`, copyright resccrew, 2026) —
+  пользователь хочет проект полностью бесплатным и открытым. README указывает на неё в разделе
+  License; вендорный `Vendor/mediaremote-adapter` остаётся под своей BSD-3 (свой LICENSE).
 
 ## README-скриншоты переснятые вживую (2026-09-27)
 - Прежние скриншоты (из `~/DynamicIslandMac-design/gallery-final/`) не понравились пользователю:
