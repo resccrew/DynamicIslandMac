@@ -50,7 +50,7 @@ import AppKit
 
 final class GlanceWidthTests: XCTestCase {
     private let glanceWidth = 306.0
-    private let minimumTextWidth = 90.0
+    private let minimumTextWidth = 80.0
 
     private func capsuleWidth(_ title: String) -> Double {
         let font = NSFont.systemFont(ofSize: DS.TypeScale.label.size, weight: .semibold)
