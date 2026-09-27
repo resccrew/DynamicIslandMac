@@ -63,15 +63,14 @@ final class PeekSymmetryTests: XCTestCase {
         XCTAssertTrue(DS.Space.scale.contains(CollapsedGeometry.defaultPeekHeightGrowth))
     }
 
-    /// Requirement (notch-only round): the ear content row is the notch
-    /// itself, not the taller collapsed silhouette — the row sits exactly
-    /// under the camera cutout, with the silhouette's `Space.s` lip below it
-    /// unused by content and unaffected by peek.
+    /// Requirement (flush round, 2026-09-27): the collapsed silhouette is
+    /// exactly the notch, so the content row equals it; peek grows below it
+    /// without moving the row.
     func testContentRowIsTheNotchNotTheSilhouette() {
         for notchHeight in [32.0, 37.5] {
             let silhouette = CollapsedGeometry.height(notchHeight: notchHeight)
             XCTAssertEqual(CollapsedGeometry.contentRowHeight(notchHeight: notchHeight), notchHeight)
-            XCTAssertNotEqual(CollapsedGeometry.contentRowHeight(notchHeight: notchHeight), silhouette)
+            XCTAssertEqual(CollapsedGeometry.contentRowHeight(notchHeight: notchHeight), silhouette)
             // Peek does not change the content row at all.
             let peekSilhouette = silhouette + CollapsedGeometry.defaultPeekHeightGrowth
             XCTAssertEqual(CollapsedGeometry.contentRowHeight(notchHeight: notchHeight), notchHeight)
@@ -104,15 +103,17 @@ final class NotchOnlyGeometryTests: XCTestCase {
 
     func testEachNotchGetsItsOwnSilhouetteAndRow() {
         for notchHeight in [32.0, 37.5] {
-            XCTAssertEqual(CollapsedGeometry.height(notchHeight: notchHeight), notchHeight + DS.Space.s)
+            XCTAssertEqual(CollapsedGeometry.height(notchHeight: notchHeight), notchHeight)
             XCTAssertEqual(CollapsedGeometry.contentRowHeight(notchHeight: notchHeight), notchHeight)
         }
     }
 }
 
 final class CollapsedShapeTests: XCTestCase {
-    func testHeightIsNotchPlusOneStepOfTheScale() {
-        XCTAssertEqual(CollapsedGeometry.height(notchHeight: 32), 32 + DS.Space.s)
+    /// Requirement change (2026-09-27): no lip below the notch — the
+    /// collapsed island must not reach into the working area.
+    func testHeightIsExactlyTheNotch() {
+        XCTAssertEqual(CollapsedGeometry.height(notchHeight: 32), 32)
     }
 
     func testBottomRadiusIsHalfTheHeightAndNeverClamped() {
