@@ -2,17 +2,28 @@ import Foundation
 
 /// The text shown in a collapsed ear. It must never be cut with an ellipsis,
 /// so every label is short by construction and `estimatedWidth` lets tests
-/// prove it fits `CollapsedGeometry.contentWidth` at the ear font (SF Pro
-/// 13 semibold, tabular digits).
+/// prove it fits `CollapsedGeometry.contentWidth(earWidth:)` at the ear font
+/// (SF Pro 13 semibold, tabular digits) for whatever ear width is in effect.
 public enum EarText {
     /// Agenda: «28 мин» while an event runs (under an hour left),
     /// «до 14:30» when it runs longer, the plain start time before it starts.
     /// `clock` formats a date as `HH:mm`.
-    public static func agenda(_ label: AgendaFormat.CollapsedLabel, clock: (Date) -> String) -> String {
+    /// Steps down the same way `duration` does when the normal phrasing does
+    /// not fit a narrow ear: "N мин" -> "Nм", "до HH:mm" -> the bare time.
+    public static func agenda(
+        _ label: AgendaFormat.CollapsedLabel, clock: (Date) -> String, earWidth: Double = DS.Ear.width
+    ) -> String {
         switch label {
-        case .startsAt(let start): return clock(start)
-        case .minutesLeft(let minutes): return "\(minutes) мин"
-        case .endsAt(let end): return "до \(clock(end))"
+        case .startsAt(let start):
+            return clock(start)
+        case .minutesLeft(let minutes):
+            let full = "\(minutes) мин"
+            if fits(full, earWidth: earWidth) { return full }
+            return "\(minutes)м"
+        case .endsAt(let end):
+            let full = "до \(clock(end))"
+            if fits(full, earWidth: earWidth) { return full }
+            return clock(end)
         }
     }
 
@@ -33,8 +44,25 @@ public enum EarText {
         }
     }
 
-    /// Whether `text` fits an ear at the smallest allowed scale.
-    public static func fits(_ text: String) -> Bool {
-        estimatedWidth(text) * CollapsedGeometry.minTextScale <= CollapsedGeometry.contentWidth
+    /// Whether `text` fits an ear of `earWidth` at the smallest allowed scale.
+    public static func fits(_ text: String, earWidth: Double = DS.Ear.width) -> Bool {
+        estimatedWidth(text) * CollapsedGeometry.minTextScale <= CollapsedGeometry.contentWidth(earWidth: earWidth)
+    }
+
+    /// A running duration (call, timer) for the ear. `FormatTime.clock`'s full
+    /// precision («1:02:05») is what the expanded card always shows, but a
+    /// narrow ear — the «Компактный» size preset especially — can be too
+    /// narrow for it even at the smallest allowed scale. Rather than let it
+    /// clip, this steps down to whole minutes and, narrower still, to a bare
+    /// number: always something exact and never cut with an ellipsis.
+    public static func duration(_ seconds: Double, earWidth: Double = DS.Ear.width) -> String {
+        let full = FormatTime.clock(seconds)
+        if fits(full, earWidth: earWidth) { return full }
+
+        let totalMinutes = Int((max(0, seconds) / 60).rounded())
+        let minutes = "\(totalMinutes)м"
+        if fits(minutes, earWidth: earWidth) { return minutes }
+
+        return "\(totalMinutes)"
     }
 }

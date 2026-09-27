@@ -1,4 +1,5 @@
 import Foundation
+import IslandGeometry
 import IslandLogic
 
 /// Presets only set values that already exist in `IslandSettings`; there is no
@@ -21,24 +22,37 @@ enum IslandSizePreset: CaseIterable, Identifiable {
         }
     }
 
-    /// Width of the expanded card. «Стандартный» is the default, where the
-    /// open card is exactly as wide as the hovered island; the others step
-    /// one spacing unit narrower or wider.
-    var expandedWidth: Double {
-        let standard = IslandSettings.Defaults.expandedWidth
+    /// The one lever this preset actually turns: the width of an ear, which
+    /// drives the collapsed and peek island directly (the old version only
+    /// changed `expandedWidth`, so the resting island never visibly reacted
+    /// to the picker — see the bug report). Multiples of 8, on the spacing
+    /// scale's step.
+    var earWidth: Double {
         switch self {
-        case .compact: return standard - DS.Space.xl
-        case .standard: return standard
-        case .large: return standard + DS.Space.cardSide
+        case .compact: return 48
+        case .standard: return DS.Ear.width
+        case .large: return 80
         }
     }
 
+    /// Not stored per preset: the open card is exactly as wide as the peek
+    /// island for whatever `earWidth` the preset picked, computed the same
+    /// way `IslandSettings.Defaults.expandedWidth` is.
+    func expandedWidth(peekGrowth: Double) -> Double {
+        CollapsedGeometry.expandedWidth(
+            notchWidth: DisplayGeometry.virtualNotchWidth,
+            peekGrowth: peekGrowth,
+            earWidth: earWidth
+        )
+    }
+
     func apply(to settings: IslandSettings) {
-        settings.expandedWidth = expandedWidth
+        settings.earWidth = earWidth
+        settings.expandedWidth = expandedWidth(peekGrowth: settings.peekWidthGrowth)
     }
 
     static func matching(_ settings: IslandSettings) -> IslandSizePreset? {
-        allCases.first { close($0.expandedWidth, settings.expandedWidth) }
+        allCases.first { close($0.earWidth, settings.earWidth) }
     }
 }
 

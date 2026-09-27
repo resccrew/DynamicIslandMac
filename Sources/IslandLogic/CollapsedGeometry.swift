@@ -24,13 +24,16 @@ public enum CollapsedGeometry {
     }
 
     /// Visible body width, fillets excluded: notch + one ear on each side.
-    public static func bodyWidth(notchWidth: Double) -> Double {
-        DS.collapsedWidth(notchWidth: notchWidth)
+    /// `earWidth` is the user's chosen ear width (`IslandSettings.earWidth`,
+    /// default `DS.Ear.width`) — the «Размер» preset changes it, and this is
+    /// the one place the collapsed/peek/expanded widths all read it from.
+    public static func bodyWidth(notchWidth: Double, earWidth: Double = DS.Ear.width) -> Double {
+        notchWidth + 2 * earWidth
     }
 
     /// Window width: the concave fillets flare outward past the body.
-    public static func windowWidth(notchWidth: Double, fillet: Double) -> Double {
-        bodyWidth(notchWidth: notchWidth) + 2 * fillet
+    public static func windowWidth(notchWidth: Double, fillet: Double, earWidth: Double = DS.Ear.width) -> Double {
+        bodyWidth(notchWidth: notchWidth, earWidth: earWidth) + 2 * fillet
     }
 
     /// Width of one ear column for an island of `islandWidth` (fillets
@@ -41,11 +44,13 @@ public enum CollapsedGeometry {
     }
 
     /// Distance from the outer edge of an ear to its content. It is
-    /// `DS.Ear.inset` measured from the *collapsed* ear, so in peek — where the
-    /// ear is wider — the extra width is added and the content stays exactly
-    /// where it was: peek grows the silhouette, not the layout.
-    public static func contentInset(earWidth: Double) -> Double {
-        DS.Ear.inset + max(0, earWidth - DS.Ear.width)
+    /// `DS.Ear.inset` measured from the *collapsed* ear — `baseEarWidth`, the
+    /// user's chosen ear width, not the `DS.Ear.width` default — so in peek,
+    /// where the ear is wider still, only the extra peek growth is added and
+    /// the content stays exactly where it was: peek grows the silhouette, not
+    /// the layout, whatever size preset is in effect.
+    public static func contentInset(earWidth: Double, baseEarWidth: Double = DS.Ear.width) -> Double {
+        DS.Ear.inset + max(0, earWidth - baseEarWidth)
     }
 
     /// Clear space kept between an ear's content and the camera cutout.
@@ -53,8 +58,10 @@ public enum CollapsedGeometry {
 
     /// Width available to an ear's content: the collapsed ear minus the outer
     /// inset and the gap to the notch, so nothing ever touches the camera.
-    public static var contentWidth: Double {
-        DS.Ear.width - DS.Ear.inset - notchGap
+    /// Takes the user's chosen ear width — the compact preset leaves much
+    /// less room, which is exactly what `EarText.fits` needs to check.
+    public static func contentWidth(earWidth: Double = DS.Ear.width) -> Double {
+        earWidth - DS.Ear.inset - notchGap
     }
 
     /// Icons of apps (Telegram, Chrome…) carry transparent margins and read
@@ -71,8 +78,9 @@ public enum CollapsedGeometry {
 
     /// Expanded card width (fillets excluded) equal to the peek width, so a
     /// card does not narrow when it opens: `peek − 2·fillet` = body + growth.
-    public static func expandedWidth(notchWidth: Double, peekGrowth: Double) -> Double {
-        bodyWidth(notchWidth: notchWidth) + peekGrowth
+    /// Also driven by `earWidth`, so a size preset's card matches its own peek.
+    public static func expandedWidth(notchWidth: Double, peekGrowth: Double, earWidth: Double = DS.Ear.width) -> Double {
+        bodyWidth(notchWidth: notchWidth, earWidth: earWidth) + peekGrowth
     }
 
     /// Height of the row the ears' content is centred in: the notch itself —
