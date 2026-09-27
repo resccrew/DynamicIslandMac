@@ -45,3 +45,24 @@ final class DesignCardsTests: XCTestCase {
         XCTAssertEqual(body, 50)
     }
 }
+
+import AppKit
+
+final class GlanceWidthTests: XCTestCase {
+    private let glanceWidth = 306.0
+    private let minimumTextWidth = 90.0
+
+    private func capsuleWidth(_ title: String) -> Double {
+        let font = NSFont.systemFont(ofSize: DS.TypeScale.label.size, weight: .semibold)
+        let text = (title as NSString).size(withAttributes: [.font: font]).width
+        return Double(text.rounded(.up)) + 2 * DS.Button.capsuleHorizontal
+    }
+
+    func testTextKeepsRoomBesideTheLongestButtons() {
+        let beforeButton = glanceWidth - 2 * DS.Space.cardSide - DS.Card.headerIconColumn - DS.Space.leadGap
+        for label in ["Подключиться", "Выполнено", "Открыть Часы", "Открыть"] {
+            let room = beforeButton - DS.Space.leadGap - capsuleWidth(label)
+            XCTAssertGreaterThanOrEqual(room, minimumTextWidth, label)
+        }
+    }
+}

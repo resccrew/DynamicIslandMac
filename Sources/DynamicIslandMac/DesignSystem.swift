@@ -243,6 +243,9 @@ struct CapsuleButton: View {
                 }
                 Text(title)
             }
+            // A capsule never wraps or shrinks: the text beside it gives way.
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
             .font(.dsLabel)
             .foregroundStyle(tint.opacity(textOpacity))
             .padding(.horizontal, DS.Button.capsuleHorizontal)

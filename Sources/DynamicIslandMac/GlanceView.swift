@@ -35,6 +35,7 @@ struct GlanceView: View {
         } trailing: {
             if let actionLabel {
                 CapsuleButton(title: actionLabel, tint: accent, action: onAction)
+                    .layoutPriority(1)
             }
         }
         .opacity(textIn ? 1 : 0)
