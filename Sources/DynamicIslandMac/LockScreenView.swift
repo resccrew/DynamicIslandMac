@@ -1,9 +1,14 @@
 import SwiftUI
 import IslandLogic
 
+/// The lock-screen card. Same visual language as the island's expanded card:
+/// `DS` fonts, opacities, spacing and control sizes, and the same progress row.
 struct LockScreenView: View {
     @ObservedObject var model: IslandViewModel
     @ObservedObject var settings: IslandSettings
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    @State private var lyricsSearchExpired = false
 
     var body: some View {
         ZStack {
@@ -19,10 +24,10 @@ struct LockScreenView: View {
                 if model.hasContent {
                     if model.lockArtExpanded {
                         expandedArt
-                            .transition(.scale(scale: 0.9).combined(with: .opacity))
+                            .transition(swapTransition(scale: LockMetrics.Transition.expandedScale))
                     } else {
                         compactCard
-                            .transition(.scale(scale: 1.05).combined(with: .opacity))
+                            .transition(swapTransition(scale: LockMetrics.Transition.compactScale))
                     }
                 }
             }
@@ -31,7 +36,12 @@ struct LockScreenView: View {
             .offset(y: model.lockArtExpanded ? 0 : settings.lockScreenOffsetY)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .animation(.spring(response: 0.3, dampingFraction: 0.9), value: model.lockPresentation)
+        .animation(.dsState(reduceMotion: reduceMotion), value: model.lockPresentation)
+    }
+
+    /// Reduce Motion: a plain fade, no scale.
+    private func swapTransition(scale: CGFloat) -> AnyTransition {
+        reduceMotion ? .opacity : .scale(scale: scale).combined(with: .opacity)
     }
 
     /// The whole lock screen washed in the cover's colours: the artwork blown up
@@ -44,18 +54,18 @@ struct LockScreenView: View {
                         .resizable()
                         .scaledToFill()
                         .frame(width: proxy.size.width, height: proxy.size.height)
-                        .blur(radius: 120, opaque: true)
-                        .scaleEffect(1.25)
+                        .blur(radius: LockMetrics.Backdrop.blur, opaque: true)
+                        .scaleEffect(LockMetrics.Backdrop.scale)
                         // Blurring averages the cover down to a muddy grey, so
                         // push the colour back up to read as ambient light.
-                        .saturation(1.8)
+                        .saturation(LockMetrics.Backdrop.saturation)
                 } else {
                     model.accent
                 }
 
                 // Just enough to keep the card and the system's own text legible.
                 LinearGradient(
-                    colors: [.black.opacity(0.18), .black.opacity(0.38)],
+                    colors: [.black.opacity(LockMetrics.Backdrop.scrimTop), .black.opacity(LockMetrics.Backdrop.scrimBottom)],
                     startPoint: .top,
                     endPoint: .bottom
                 )
@@ -71,101 +81,118 @@ struct LockScreenView: View {
     // MARK: - Compact card
 
     private var compactCard: some View {
-        VStack(spacing: 18) {
-            HStack(spacing: 16) {
-                artwork(size: 84)
+        VStack(spacing: DS.Space.sectionGap) {
+            HStack(spacing: DS.Space.leadGap) {
+                artwork(size: LockMetrics.compactArtwork)
                     .onTapGesture { model.toggleLockArt() }
 
-                VStack(alignment: .leading, spacing: 14) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(model.title)
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundStyle(palette.primary)
-                            .lineLimit(1)
-                        Text(model.artist)
-                            .font(.system(size: 14))
-                            .foregroundStyle(palette.secondary)
-                            .lineLimit(1)
-                    }
-
-                    compactControlsRow
+                VStack(alignment: .leading, spacing: DS.Space.m) {
+                    titleBlock(alignment: .leading)
+                    controlsRow
                 }
 
                 Spacer(minLength: 0)
             }
 
-            compactProgressSection
+            progressRow
         }
-        .padding(24)
+        .padding(.horizontal, DS.Space.cardSide)
+        .padding(.vertical, DS.Space.xl)
         .frame(width: settings.lockScreenWidth)
         .background(cardBackground)
     }
 
-    private var compactControlsRow: some View {
-        HStack(spacing: 24) {
-            Button {
-                model.skipPrevious()
-            } label: {
-                Image(systemName: "backward.end")
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundStyle(palette.secondary)
-            }
-            .buttonStyle(.plain)
+    private func titleBlock(alignment: HorizontalAlignment) -> some View {
+        VStack(alignment: alignment, spacing: DS.Space.titleGap) {
+            Text(model.title)
+                .font(.dsCardTitle)
+                .foregroundStyle(palette.primary)
+                .lineLimit(1)
+            Text(model.artist)
+                .font(.dsBody)
+                .foregroundStyle(palette.secondary)
+                .lineLimit(1)
+        }
+    }
+
+    private var controlsRow: some View {
+        HStack(spacing: DS.Space.xl) {
+            MediaButton(
+                systemName: "backward.end",
+                size: DS.Button.secondaryIconMin,
+                opacity: DS.Opacity.secondary,
+                width: DS.Button.secondaryHitFrame,
+                height: DS.Button.secondaryHitFrame,
+                highlightDiameter: DS.Button.primary,
+                tint: palette.tint
+            ) { model.skipPrevious() }
+            .accessibilityLabel("Предыдущий трек")
 
             Button {
                 model.togglePlayPause()
             } label: {
                 Image(systemName: model.isPlaying ? "pause.fill" : "play.fill")
-                    .font(.system(size: 16, weight: .bold))
+                    .font(.dsEar)
                     .foregroundStyle(palette.background)
-                    .frame(width: 44, height: 44)
-                    .background(Circle().fill(palette.primary))
+                    .frame(width: DS.Button.primary, height: DS.Button.primary)
+                    .background(Circle().fill(palette.tint))
+                    .contentShape(Circle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(MediaButtonStyle(diameter: DS.Button.primary, tint: palette.tint))
+            .accessibilityLabel(model.isPlaying ? "Пауза" : "Воспроизвести")
 
-            Button {
-                model.skipNext()
-            } label: {
-                Image(systemName: "forward.end")
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundStyle(palette.secondary)
-            }
-            .buttonStyle(.plain)
+            MediaButton(
+                systemName: "forward.end",
+                size: DS.Button.secondaryIconMin,
+                opacity: DS.Opacity.secondary,
+                width: DS.Button.secondaryHitFrame,
+                height: DS.Button.secondaryHitFrame,
+                highlightDiameter: DS.Button.primary,
+                tint: palette.tint
+            ) { model.skipNext() }
+            .accessibilityLabel("Следующий трек")
         }
     }
 
-    private var compactProgressSection: some View {
-        VStack(spacing: 8) {
-            GeometryReader { proxy in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(palette.trackBackground)
-                    Capsule()
-                        .fill(palette.trackFill)
-                        .frame(width: proxy.size.width * progressFraction)
-                }
-            }
-            .frame(height: 4)
+    /// Elapsed, bar and remaining on one line — the island's progress row.
+    private var progressRow: some View {
+        HStack(spacing: DS.Space.inlineGap) {
+            Text(FormatTime.playback(position: model.position, duration: model.duration).elapsed)
+                .font(.dsCaption)
+                .foregroundStyle(palette.tertiary)
 
-            HStack {
-                Text(FormatTime.playback(position: model.position, duration: model.duration).elapsed)
-                    .font(.system(size: 12))
-                    .foregroundStyle(palette.secondary)
-                    .monospacedDigit()
-                Spacer(minLength: 0)
-                Text(model.duration > 0 ? "-\(FormatTime.playback(position: model.position, duration: model.duration).remaining)" : "LIVE")
-                    .font(.system(size: 12))
-                    .foregroundStyle(palette.secondary)
-                    .monospacedDigit()
+            progressBar
+
+            if model.duration > 0 {
+                Text("-\(FormatTime.playback(position: model.position, duration: model.duration).remaining)")
+                    .font(.dsCaption)
+                    .foregroundStyle(palette.tertiary)
+            } else {
+                // Live streams have no length.
+                Text("LIVE")
+                    .font(.dsCaption)
+                    .foregroundStyle(Accent.calendarRed.opacity(DS.Opacity.secondary))
             }
+        }
+    }
+
+    /// `DSProgressBar` draws a white track; on the light card the whole bar is
+    /// inverted to black (same alpha), so both themes use the one component.
+    @ViewBuilder
+    private var progressBar: some View {
+        let bar = DSProgressBar(
+            mode: .determinate(fraction: progressFraction),
+            tint: .white,
+            reduceMotion: reduceMotion
+        )
+        if settings.lockCardLightTheme {
+            bar.colorInvert()
+        } else {
+            bar
         }
     }
 
     // MARK: - Expanded artwork
-
-    /// Whether the lyrics step is offered at all.
-    private var lyricsAvailable: Bool {
-        settings.lyricsEnabled
-    }
 
     /// Driven purely by which step the user is on.
     ///
@@ -174,28 +201,17 @@ struct LockScreenView: View {
     /// layout to that made the whole player slide to the middle and back every
     /// time the song changed.
     private var showsLyrics: Bool {
-        lyricsAvailable && model.lockPresentation == .lyrics
+        settings.lyricsEnabled && model.lockPresentation == .lyrics
     }
 
     private var lyricsToggle: some View {
-        Button {
-            model.toggleLockLyrics()
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: "quote.bubble.fill")
-                    .font(.system(size: 12, weight: .semibold))
-                Text("Текст")
-                    .font(.system(size: 12, weight: .semibold))
-            }
-            .foregroundStyle(.white.opacity(showsLyrics ? 1 : 0.7))
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
-            .background(
-                Capsule().fill(.white.opacity(showsLyrics ? 0.22 : 0.10))
-            )
-            .contentShape(Capsule())
-        }
-        .buttonStyle(MediaButtonStyle(diameter: 0))
+        CapsuleButton(
+            title: "Текст",
+            systemImage: "quote.bubble.fill",
+            tint: .white,
+            fillOpacity: showsLyrics ? DS.Opacity.track : LockMetrics.chipIdleFill,
+            textOpacity: showsLyrics ? DS.Opacity.primary : DS.Opacity.secondary
+        ) { model.toggleLockLyrics() }
     }
 
     /// Karaoke column: the whole song laid out and slid vertically so the line
@@ -203,67 +219,81 @@ struct LockScreenView: View {
     /// few labels is what makes it glide instead of snapping line to line.
     private var lyricsColumn: some View {
         let index = model.currentLyricIndex ?? 0
-        let lineHeight: CGFloat = 62
-        let visibleLines: CGFloat = 5
-        let viewportHeight = lineHeight * visibleLines
+        let lineHeight = LockMetrics.Lyrics.lineHeight
+        let viewportHeight = lineHeight * LockMetrics.Lyrics.visibleLines
 
-        return VStack(alignment: .leading, spacing: 0) {
+        return Group {
+            if model.lyrics.isEmpty {
+                lyricsPlaceholder
+            } else {
+                lyricsLines(index: index, lineHeight: lineHeight, viewportHeight: viewportHeight)
+            }
+        }
+        .frame(width: settings.lockScreenArtSize * LockMetrics.Lyrics.widthToArtwork, height: viewportHeight, alignment: .top)
+    }
+
+    private func lyricsLines(index: Int, lineHeight: CGFloat, viewportHeight: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(model.lyrics.enumerated()), id: \.offset) { position, line in
                 let isCurrent = position == index
                 Text(line.text.isEmpty ? "♪" : line.text)
-                    .font(.system(size: 21, weight: isCurrent ? .bold : .semibold))
-                    .foregroundStyle(.white.opacity(isCurrent ? 1 : 0.3))
-                    .shadow(color: .white.opacity(isCurrent ? 0.35 : 0), radius: 10)
+                    .font(.system(size: LockMetrics.Lyrics.fontSize, weight: isCurrent ? .bold : .semibold))
+                    .foregroundStyle(.white.opacity(isCurrent ? DS.Opacity.primary : LockMetrics.Lyrics.inactiveOpacity))
+                    .shadow(color: .white.opacity(isCurrent ? LockMetrics.Lyrics.glowOpacity : 0), radius: LockMetrics.Lyrics.glowRadius)
                     .lineLimit(2)
                     .frame(height: lineHeight, alignment: .leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .offset(y: viewportHeight / 2 - lineHeight / 2 - CGFloat(index) * lineHeight)
-        .frame(width: 400, height: viewportHeight, alignment: .top)
+        .frame(maxHeight: viewportHeight, alignment: .top)
         .clipped()
         // Fades the lines running off the top and bottom instead of cutting them.
         .mask(
             LinearGradient(
                 stops: [
                     .init(color: .clear, location: 0),
-                    .init(color: .black, location: 0.18),
-                    .init(color: .black, location: 0.82),
+                    .init(color: .black, location: LockMetrics.Lyrics.fadeEdge),
+                    .init(color: .black, location: 1 - LockMetrics.Lyrics.fadeEdge),
                     .init(color: .clear, location: 1),
                 ],
                 startPoint: .top,
                 endPoint: .bottom
             )
         )
-        .animation(.easeInOut(duration: 0.45), value: index)
+        .animation(.dsFade(reduceMotion: reduceMotion), value: index)
+    }
+
+    /// No lines yet: first «Ищем текст…», and once the search has had its time, «Текст не найден».
+    private var lyricsPlaceholder: some View {
+        Text(lyricsSearchExpired ? "Текст не найден" : "Ищем текст…")
+            .font(.dsCardTitle)
+            .foregroundStyle(.white.opacity(DS.Opacity.secondary))
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .task(id: model.trackKey) {
+                lyricsSearchExpired = false
+                try? await Task.sleep(nanoseconds: UInt64(LockMetrics.Lyrics.searchSeconds * 1_000_000_000))
+                lyricsSearchExpired = true
+            }
     }
 
     private var playerColumn: some View {
-        VStack(spacing: 18) {
+        let width = settings.lockScreenArtSize * LockMetrics.playerWidthToArtwork
+        return VStack(spacing: DS.Space.xl) {
             artwork(size: settings.lockScreenArtSize)
                 .onTapGesture { model.toggleLockArt() }
 
-            VStack(spacing: 16) {
-                VStack(spacing: 2) {
-                    Text(model.title)
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(palette.primary)
-                        .lineLimit(1)
-                    Text(model.artist)
-                        .font(.system(size: 14))
-                        .foregroundStyle(palette.secondary)
-                        .lineLimit(1)
-                }
-
-                compactProgressSection
-                compactControlsRow
+            VStack(spacing: DS.Space.sectionGap) {
+                titleBlock(alignment: .center)
+                progressRow
+                controlsRow
             }
-            .padding(.horizontal, 24)
-            .padding(.vertical, 20)
-            .frame(width: settings.lockScreenArtSize * 0.78)
+            .padding(.horizontal, DS.Space.cardSide)
+            .padding(.vertical, DS.Space.xl)
+            .frame(width: width)
             .background(cardBackground)
 
-            if lyricsAvailable {
+            if settings.lyricsEnabled {
                 lyricsToggle
             }
         }
@@ -272,7 +302,7 @@ struct LockScreenView: View {
     /// With lyrics the player moves aside to make room for them; without lyrics
     /// there is nothing to pair it with, so it stays centred on its own.
     private var expandedArt: some View {
-        HStack(spacing: 56) {
+        HStack(spacing: LockMetrics.playerToLyrics) {
             playerColumn
             if showsLyrics {
                 lyricsColumn
@@ -283,45 +313,57 @@ struct LockScreenView: View {
 
     // MARK: - Shared pieces
 
+    /// The real cover only — never the source app's icon blown up to cover size;
+    /// without a cover the tile shows a neutral note.
     private func artwork(size: CGFloat) -> some View {
-        FlipArtwork(image: model.displayArtwork, trackKey: model.trackKey, size: size, cornerRatio: 0.16)
-            .shadow(color: .black.opacity(0.35), radius: 18, y: 8)
-    }
-
-    /// Colours for the card content — swaps with `lockCardLightTheme` so the
-    /// same layout reads correctly against either background.
-    private var palette: (primary: Color, secondary: Color, trackBackground: Color, trackFill: Color, background: Color) {
-        if settings.lockCardLightTheme {
-            (.black.opacity(0.85), .black.opacity(0.45), .black.opacity(0.1), .black.opacity(0.75), .white)
-        } else {
-            (.white, .white.opacity(0.65), .white.opacity(0.25), .white.opacity(0.9), .black)
+        ZStack {
+            FlipArtwork(image: model.artwork, trackKey: model.trackKey, size: size)
+            if model.artwork == nil {
+                Image(systemName: "music.note")
+                    .font(.system(size: size * LockMetrics.placeholderGlyphRatio, weight: .semibold))
+                    .foregroundStyle(.white.opacity(DS.Opacity.tertiary))
+            }
         }
+        .shadow(
+            color: .black.opacity(LockMetrics.Shadow.artworkOpacity),
+            radius: LockMetrics.Shadow.artworkRadius,
+            y: LockMetrics.Shadow.artworkY
+        )
     }
 
-    /// A solid white card for the light theme, matching a native widget;
-    /// translucent glass over the ambient wash for the default dark theme.
+    /// Colours for the card content: the three text levels of the design system,
+    /// in black on the light card and white on the dark one.
+    private var palette: (primary: Color, secondary: Color, tertiary: Color, tint: Color, background: Color) {
+        let ink: Color = settings.lockCardLightTheme ? .black : .white
+        let paper: Color = settings.lockCardLightTheme ? .white : .black
+        return (
+            ink.opacity(DS.Opacity.primary),
+            ink.opacity(DS.Opacity.secondary),
+            ink.opacity(DS.Opacity.tertiary),
+            ink,
+            paper
+        )
+    }
+
+    /// Dark by default, like the island — and no outline, like the island. The
+    /// light card stays as an option.
     private var cardBackground: some View {
-        Group {
+        let shape = RoundedRectangle(cornerRadius: DS.Radius.lockCard, style: .continuous)
+        return Group {
             if settings.lockCardLightTheme {
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .fill(Color.white)
-                    .shadow(color: .black.opacity(0.25), radius: 20, y: 8)
+                shape.fill(Color.white)
+                    .shadow(color: .black.opacity(LockMetrics.Shadow.cardLightOpacity),
+                            radius: LockMetrics.Shadow.cardRadius, y: LockMetrics.Shadow.cardY)
             } else {
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .fill(Color(white: 0.1))
-                    .shadow(color: .black.opacity(0.4), radius: 20, y: 8)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 22, style: .continuous)
-                            .strokeBorder(.white.opacity(0.08), lineWidth: 1)
-                    )
+                shape.fill(Color(white: LockMetrics.darkCardWhite))
+                    .shadow(color: .black.opacity(LockMetrics.Shadow.cardDarkOpacity),
+                            radius: LockMetrics.Shadow.cardRadius, y: LockMetrics.Shadow.cardY)
             }
         }
     }
 
-    private var progressFraction: CGFloat {
+    private var progressFraction: Double {
         guard model.duration > 0 else { return 0 }
-        return CGFloat(min(1, max(0, model.position / model.duration)))
+        return min(1, max(0, model.position / model.duration))
     }
-
-    private func formatTime(_ seconds: Double) -> String { FormatTime.clock(seconds) }
 }

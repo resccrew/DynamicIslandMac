@@ -89,11 +89,11 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <key>LSUIElement</key>
     <true/>
     <key>NSAppleEventsUsageDescription</key>
-    <string>Чтобы показывать текущий трек, приложению нужен доступ к Spotify и Music.</string>
+    <string>Остров показывает, что сейчас играет в Spotify и «Музыке». Доступ нужен, когда системный способ недоступен.</string>
     <key>NSCalendarsFullAccessUsageDescription</key>
-    <string>Чтобы показывать события из Календаря в острове, приложению нужен доступ к календарю.</string>
+    <string>Остров предупредит о ближайших событиях и покажет кнопку «Подключиться» к созвону. Данные остаются на этом Mac.</string>
     <key>NSRemindersFullAccessUsageDescription</key>
-    <string>Чтобы показывать напоминания и отмечать их выполненными, приложению нужен доступ к Напоминаниям.</string>
+    <string>Остров покажет напоминания, у которых наступил срок, и отметит их выполненными по кнопке. Данные остаются на этом Mac.</string>
 </dict>
 PLIST
 echo "</plist>" >> "$APP/Contents/Info.plist"

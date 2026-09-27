@@ -79,6 +79,12 @@ final class IslandSettings: ObservableObject {
     /// Local Live Activity API for scripts (`LiveActivityServer`).
     @Published var allowExternalAPI: Bool { didSet { persist() } }
 
+    /// A light trackpad tick when the pointer first touches the island.
+    @Published var hoverHaptics: Bool { didSet { persist() } }
+    /// The welcome (settings opened on the Calendar tab) has been shown once.
+    /// Not part of `resetToDefaults`: a reset must not bring the welcome back.
+    @Published var hasCompletedOnboarding: Bool { didSet { persist() } }
+
     /// Which display hosts the island when several are connected.
     @Published var displayPolicy: IslandDisplayPolicy { didSet { persist() } }
 
@@ -117,10 +123,11 @@ final class IslandSettings: ObservableObject {
         static let lockScreenArtSize = 360.0
         /// Below centre, so the card sits just above the avatar and password field.
         static let lockScreenOffsetY = 230.0
-        static let lockCardLightTheme = true
+        static let lockCardLightTheme = false
         static let lyricsEnabled = true
-        static let calendarEnabled = true
-        static let remindersEnabled = true
+        /// Off until the user turns them on: the system asks for access at that moment, not at launch.
+        static let calendarEnabled = false
+        static let remindersEnabled = false
         static let eventLeadMinutes = 5.0
         static let preventSleepOnLock = false
         static let preventSleepMinutes = 10.0
@@ -128,6 +135,7 @@ final class IslandSettings: ObservableObject {
         static let hideWhenPaused = false
         static let hideInFullScreen = true
         static let allowExternalAPI = true
+        static let hoverHaptics = true
         static let displayPolicy = IslandDisplayPolicy.primary
     }
 
@@ -183,6 +191,11 @@ final class IslandSettings: ObservableObject {
             ?? Defaults.hideInFullScreen
         allowExternalAPI = UserDefaults.standard.object(forKey: "allowExternalAPI") as? Bool
             ?? Defaults.allowExternalAPI
+        hoverHaptics = UserDefaults.standard.object(forKey: "hoverHaptics") as? Bool
+            ?? Defaults.hoverHaptics
+        // An install that already has saved settings is not a first launch.
+        hasCompletedOnboarding = UserDefaults.standard.object(forKey: "hasCompletedOnboarding") as? Bool
+            ?? (UserDefaults.standard.object(forKey: "collapsedWidth") != nil)
         displayPolicy = IslandDisplayPolicy(stored: UserDefaults.standard.string(forKey: "displayPolicy"))
 
         isLoading = false
@@ -336,6 +349,7 @@ final class IslandSettings: ObservableObject {
         hideWhenPaused = Defaults.hideWhenPaused
         hideInFullScreen = Defaults.hideInFullScreen
         allowExternalAPI = Defaults.allowExternalAPI
+        hoverHaptics = Defaults.hoverHaptics
         displayPolicy = Defaults.displayPolicy
         isLoading = false
         persist()
@@ -385,6 +399,8 @@ final class IslandSettings: ObservableObject {
         d.set(hideWhenPaused, forKey: "hideWhenPaused")
         d.set(hideInFullScreen, forKey: "hideInFullScreen")
         d.set(allowExternalAPI, forKey: "allowExternalAPI")
+        d.set(hoverHaptics, forKey: "hoverHaptics")
+        d.set(hasCompletedOnboarding, forKey: "hasCompletedOnboarding")
         d.set(displayPolicy.rawValue, forKey: "displayPolicy")
     }
 }

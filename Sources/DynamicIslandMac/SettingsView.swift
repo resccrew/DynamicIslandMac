@@ -1,199 +1,410 @@
-import SwiftUI
+import AppKit
 import IslandGeometry
+import IslandLogic
+import SwiftUI
+
+/// The settings window's tabs, in display order.
+enum SettingsTab: Hashable {
+    case general
+    case island
+    case calendar
+    case lockScreen
+    case advanced
+}
+
+/// Which tab is showing. Owned by the window controller so the menu can open
+/// the window straight on «Календарь».
+final class SettingsNavigation: ObservableObject {
+    @Published var tab: SettingsTab = .general
+}
+
+/// Sizes and ranges of the settings window, in one place.
+enum SettingsMetrics {
+    /// One size for the window and the view inside it.
+    static let windowWidth: CGFloat = 580
+    static let windowHeight: CGFloat = 560
+
+    /// Slider rows: label column, value column.
+    static let labelColumn: CGFloat = 200
+    static let valueColumn: CGFloat = 44
+    static let segmentedWidth: CGFloat = 220
+
+    static let leadMinutes: [Double] = [1, 2, 5, 10, 15, 30]
+    static let keepAwakeMinutes: [Double] = [5, 10, 15, 30, 60]
+
+    enum Range {
+        static let expandedWidth = 260.0...900.0
+        static let expandedBottomRadius = 0.0...70.0
+        static let idleHeightExtra = 0.0...20.0
+        static let fillet = 0.0...40.0
+        static let peekWidthGrowth = 0.0...80.0
+        static let peekHeightGrowth = 0.0...30.0
+        static let animationDuration = 0.12...0.7
+        static let lockScreenWidth = 240.0...600.0
+        static let lockScreenArtSize = 200.0...560.0
+        static let lockScreenOffsetY = -350.0...350.0
+    }
+
+    /// Slider value labels for the two curve exponents and the animation time.
+    static let fractionDigits = 2
+}
 
 struct SettingsView: View {
     @ObservedObject var settings: IslandSettings
+    @ObservedObject var agenda: AgendaMonitor
+    @ObservedObject var navigation: SettingsNavigation
+
+    @State private var loginState = LaunchAtLogin.state
+    @State private var loginError: String?
+    @State private var tokenCopied = false
+    @State private var confirmsReset = false
 
     var body: some View {
         VStack(spacing: 0) {
-            TabView {
-                tab { appearance }
-                    .tabItem { Label("Внешний вид", systemImage: "paintbrush") }
+            TabView(selection: $navigation.tab) {
+                tab { general }
+                    .tabItem { Label("Основное", systemImage: "gearshape") }
+                    .tag(SettingsTab.general)
+
+                tab { island }
+                    .tabItem { Label("Остров", systemImage: "capsule.tophalf.filled") }
+                    .tag(SettingsTab.island)
+
+                tab { calendar }
+                    .tabItem { Label("Календарь", systemImage: "calendar") }
+                    .tag(SettingsTab.calendar)
 
                 tab { lockScreen }
                     .tabItem { Label("Экран блокировки", systemImage: "lock.display") }
+                    .tag(SettingsTab.lockScreen)
 
-                tab { behaviour }
-                    .tabItem { Label("Поведение", systemImage: "slider.horizontal.3") }
+                tab { advanced }
+                    .tabItem { Label("Дополнительно", systemImage: "slider.horizontal.3") }
+                    .tag(SettingsTab.advanced)
             }
-            .padding(.top, 10)
+            .padding(.top, DS.Space.m)
 
             Divider()
 
             HStack {
-                Button("Сбросить всё") { settings.resetToDefaults() }
+                Button("Сбросить всё…") { confirmsReset = true }
                 Spacer()
                 Text("Изменения применяются сразу")
                     .font(.dsCaption)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
+            .padding(.horizontal, DS.Space.xl)
+            .padding(.vertical, DS.Space.l)
         }
-        .frame(width: 460, height: 580)
+        .frame(width: SettingsMetrics.windowWidth, height: SettingsMetrics.windowHeight)
+        .confirmationDialog("Сбросить все настройки?", isPresented: $confirmsReset, titleVisibility: .visible) {
+            Button("Сбросить", role: .destructive) { settings.resetToDefaults() }
+            Button("Отмена", role: .cancel) {}
+        } message: {
+            Text("Все настройки вернутся к значениям по умолчанию.")
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            // Back from System Settings: permissions and login items may have changed.
+            agenda.refreshAccess()
+            loginState = LaunchAtLogin.state
+        }
     }
 
     private func tab<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
-                content()
-            }
-            .padding(20)
-        }
+        Form { content() }
+            .formStyle(.grouped)
     }
 
-    // MARK: - Tabs
+    // MARK: - Основное
 
-    private var appearance: some View {
+    private var general: some View {
         Group {
-            section("Свёрнутый вид") {
-                slider("Ширина", $settings.collapsedWidth, 120...700)
-                slider("Высота", $settings.collapsedHeight, 20...80)
-                slider("Обложка", $settings.collapsedArtwork, 10...60)
-                slider("Отступ по краям", $settings.collapsedPadding, 0...60)
-                slider("Нижний радиус", $settings.collapsedBottomRadius, 0...40)
+            Section {
+                Toggle("Открывать при входе в систему", isOn: launchAtLoginBinding)
+                    .disabled(loginState == .unavailable)
+            } header: {
+                Text("Запуск")
+            } footer: {
+                hint(launchAtLoginHint)
             }
 
-            section("Развёрнутый вид") {
-                slider("Ширина", $settings.expandedWidth, 260...900)
-                slider("Обложка", $settings.expandedArtwork, 30...140)
-                slider("Отступ по краям", $settings.expandedPadding, 0...60)
-                slider("Отступ сверху", $settings.expandedTopPadding, 0...50)
-                slider("Нижний радиус", $settings.expandedBottomRadius, 0...70)
+            Section {
+                Toggle("Значок в строке меню", isOn: $settings.showStatusIcon)
+            } header: {
+                Text("Строка меню")
+            } footer: {
+                hint("Если выключить, настройки открываются повторным запуском приложения из «Программ».")
             }
 
-            section("Форма выреза") {
-                slider("Выступ в покое", $settings.idleHeightExtra, 0...20)
-                slider("Сопряжение с экраном", $settings.fillet, 0...40)
-                slider("Кривая нижних углов", $settings.bottomExponent, 2...8, decimals: 2)
-                slider("Кривая сопряжения", $settings.topExponent, 2...6, decimals: 2)
-                hint("2 — обычная окружность, больше — сглаживание Apple (суперэллипс).")
+            Section {
+                Toggle("Вибрация при наведении", isOn: $settings.hoverHaptics)
+            } header: {
+                Text("Отклик")
+            } footer: {
+                hint("Лёгкий тик трекпада, когда курсор касается острова. Работает на трекпадах Force Touch.")
             }
 
-            section("Текст") {
-                slider("Название", $settings.titleFontSize, 10...28)
-                slider("Исполнитель", $settings.artistFontSize, 8...24)
+            Section("О программе") {
+                LabeledContent("Dynamic Island", value: versionText)
             }
         }
     }
+
+    private var launchAtLoginBinding: Binding<Bool> {
+        Binding(
+            get: { loginState == .enabled || loginState == .requiresApproval },
+            set: { enabled in
+                switch LaunchAtLogin.set(enabled) {
+                case .success: loginError = nil
+                case .failure: loginError = "Не удалось изменить автозапуск. Проверьте «Объекты входа» в Системных настройках."
+                }
+                loginState = LaunchAtLogin.state
+            }
+        )
+    }
+
+    private var launchAtLoginHint: String {
+        if let loginError { return loginError }
+        switch loginState {
+        case .requiresApproval: return "Разрешите приложение в «Системные настройки → Основные → Объекты входа»."
+        case .unavailable: return "Работает только у установленного приложения из «Программ»."
+        case .enabled, .disabled: return "Остров появится сам после включения Mac."
+        }
+    }
+
+    private var versionText: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
+    }
+
+    // MARK: - Остров
+
+    private var island: some View {
+        Group {
+            Section("Вид") {
+                presetPicker("Размер", IslandSizePreset.allCases, selected: IslandSizePreset.matching(settings),
+                             title: \.title) { $0.apply(to: settings) }
+                presetPicker("Реакция на наведение", HoverPreset.allCases, selected: HoverPreset.matching(settings),
+                             title: \.title) { $0.apply(to: settings) }
+                presetPicker("Анимация", AnimationPreset.allCases, selected: AnimationPreset.matching(settings),
+                             title: \.title) { $0.apply(to: settings) }
+            }
+
+            Section {
+                Picker("Экран", selection: $settings.displayPolicy) {
+                    Text("Основной (со строкой меню)").tag(IslandDisplayPolicy.primary)
+                    Text("Встроенный, с вырезом").tag(IslandDisplayPolicy.builtIn)
+                }
+            } header: {
+                Text("Где показывать")
+            } footer: {
+                hint("Если встроенного экрана нет (крышка закрыта), остров переезжает на основной.")
+            }
+
+            Section {
+                Toggle("В полноэкранном режиме", isOn: $settings.hideInFullScreen)
+                Toggle("На паузе", isOn: $settings.hideWhenPaused)
+            } header: {
+                Text("Когда прятать остров")
+            } footer: {
+                hint("На паузе остров остаётся, пока открыт источник (вкладка или приложение); в полноэкранном режиме исчезает и возвращается после выхода.")
+            }
+
+            Section {
+                Toggle("Разрешить скриптам показывать прогресс", isOn: $settings.allowExternalAPI)
+                if settings.allowExternalAPI {
+                    Button(tokenCopied ? "Токен скопирован" : "Скопировать токен") { copyToken() }
+                }
+            } header: {
+                Text("Скрипты")
+            } footer: {
+                hint("Только с этого Mac и только с токеном. Команда island из папки tools показывает сборку, тесты и другие задачи в острове.")
+            }
+        }
+    }
+
+    private func presetPicker<Preset: Identifiable & Hashable>(
+        _ label: String,
+        _ presets: [Preset],
+        selected: Preset?,
+        title: KeyPath<Preset, String>,
+        apply: @escaping (Preset) -> Void
+    ) -> some View {
+        Picker(label, selection: Binding<Preset?>(get: { selected }, set: { $0.map(apply) })) {
+            ForEach(presets) { preset in
+                Text(preset[keyPath: title]).tag(Optional(preset))
+            }
+            if selected == nil {
+                Text("Другой").tag(nil as Preset?)
+            }
+        }
+        .pickerStyle(.segmented)
+    }
+
+    private func copyToken() {
+        guard case let .success(token) = LiveActivityToken.loadOrCreate() else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(token, forType: .string)
+        tokenCopied = true
+    }
+
+    // MARK: - Календарь
+
+    private var calendar: some View {
+        Group {
+            Section {
+                Toggle("События календаря", isOn: $settings.calendarEnabled)
+                if settings.calendarEnabled {
+                    minutesPicker("Напоминать о событии за", $settings.eventLeadMinutes,
+                                  options: SettingsMetrics.leadMinutes)
+                    accessRow(agenda.eventsAccess, kind: .events)
+                }
+            } header: {
+                Text("Календарь")
+            } footer: {
+                hint("Остров предупредит о ближайшей встрече и покажет кнопку «Подключиться», если в событии есть ссылка на созвон.")
+            }
+
+            Section {
+                Toggle("Напоминания", isOn: $settings.remindersEnabled)
+                if settings.remindersEnabled {
+                    accessRow(agenda.remindersAccess, kind: .reminders)
+                }
+            } header: {
+                Text("Напоминания")
+            } footer: {
+                hint("Когда подходит срок, остров покажет напоминание с кнопкой «Выполнено».")
+            }
+
+            Section {
+            } footer: {
+                hint("Данные берутся из системных «Календаря» и «Напоминаний» (iCloud, Google, Exchange) и остаются на этом Mac. macOS спросит разрешение, когда вы включите функцию.")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func accessRow(_ access: AgendaAccess, kind: AgendaAccessKind) -> some View {
+        switch access {
+        case .granted:
+            Label("Доступ разрешён", systemImage: "checkmark.circle.fill")
+                .foregroundStyle(Accent.successGreen)
+        case .notDetermined:
+            HStack {
+                Label("Нужно разрешение", systemImage: "questionmark.circle.fill")
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button("Разрешить") { agenda.requestAccess(kind) }
+            }
+        case .denied:
+            HStack {
+                Label("Нет доступа", systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(Accent.failureRed)
+                Spacer()
+                Button("Открыть Системные настройки") {
+                    if let url = kind.systemSettingsURL { NSWorkspace.shared.open(url) }
+                }
+            }
+        }
+    }
+
+    // MARK: - Экран блокировки
 
     private var lockScreen: some View {
         Group {
-            section("Карточка") {
+            Section("Карточка") {
                 Toggle("Показывать на экране блокировки", isOn: $settings.lockScreenEnabled)
-                    .font(.dsBody)
-                slider("Ширина карточки", $settings.lockScreenWidth, 240...600)
-                slider("Обложка развёрнутая", $settings.lockScreenArtSize, 200...560)
-                slider("Сдвиг по вертикали", $settings.lockScreenOffsetY, -350...350)
                 Picker("Тема", selection: $settings.lockCardLightTheme) {
                     Text("Светлая").tag(true)
-                    Text("Темная").tag(false)
+                    Text("Тёмная").tag(false)
                 }
                 .pickerStyle(.segmented)
-                .frame(width: 200)
-                hint("Светлая — белая непрозрачная, Темная — темная непрозрачная.")
-                hint("Клик по обложке увеличивает её, затем кнопка «Текст» открывает караоке.")
+                slider("Положение по вертикали", $settings.lockScreenOffsetY, SettingsMetrics.Range.lockScreenOffsetY)
             }
 
-            section("Текст песни") {
-                Toggle("Караоке", isOn: $settings.lyricsEnabled)
-                    .font(.dsBody)
-                hint("Тексты берутся с lrclib.net — туда уходят название трека и исполнитель.")
+            Section {
+                Toggle("Текст песни", isOn: $settings.lyricsEnabled)
+            } header: {
+                Text("Текст песни")
+            } footer: {
+                hint("Клик по обложке увеличивает её, кнопка «Текст» открывает текст песни. Тексты берутся с lrclib.net — туда уходят название трека и исполнитель.")
             }
 
-            section("Календарь и напоминания") {
-                Toggle("События календаря", isOn: $settings.calendarEnabled)
-                    .font(.dsBody)
-                if settings.calendarEnabled {
-                    slider("Предупреждать за, минут", $settings.eventLeadMinutes, 1...30)
-                }
-                Toggle("Напоминания", isOn: $settings.remindersEnabled)
-                    .font(.dsBody)
-                hint("Берётся из системных «Календаря» и «Напоминаний», включая iCloud и Google.")
-            }
-
-            section("Питание") {
+            Section {
                 Toggle("Не гасить экран при блокировке", isOn: $settings.preventSleepOnLock)
-                    .font(.dsBody)
                 if settings.preventSleepOnLock {
-                    slider("Держать, минут", $settings.preventSleepMinutes, 1...120)
-                    hint("По истечении времени экран гаснет сам, чтобы не сажать батарею.")
+                    minutesPicker("Не гасить в течение", $settings.preventSleepMinutes,
+                                  options: SettingsMetrics.keepAwakeMinutes)
                 }
+            } header: {
+                Text("Экран не гаснет")
+            } footer: {
+                hint("По истечении времени экран гаснет сам, чтобы не тратить батарею.")
             }
         }
     }
 
-        private var behaviour: some View {
+    // MARK: - Дополнительно
+
+    private var advanced: some View {
         Group {
-            section("Наведение и анимация") {
-                slider("Подрост при наведении", $settings.peekWidthGrowth, 0...80)
-                slider("Подрост по высоте", $settings.peekHeightGrowth, 0...30)
-                slider("Скорость анимации", $settings.animationDuration, 0.12...0.7, decimals: 2)
-                hint("Наведение — лёгкий подрост с вибрацией, клик — полное раскрытие.")
+            Section {
+            } footer: {
+                hint("Тонкая настройка формы. Обычно хватает пресетов на вкладке «Остров».")
             }
 
-            section("Полноэкранный режим") {
-                Toggle("Прятать при полноэкранном режиме", isOn: $settings.hideInFullScreen)
-                    .font(.dsBody)
-                hint("Фильм или приложение на весь экран — остров исчезает и возвращается после выхода.")
+            Section("Развёрнутый вид") {
+                slider("Ширина", $settings.expandedWidth, SettingsMetrics.Range.expandedWidth)
+                slider("Нижний радиус", $settings.expandedBottomRadius, SettingsMetrics.Range.expandedBottomRadius)
             }
 
-            section("Пауза") {
-                Toggle("Скрывать остров на паузе", isOn: $settings.hideWhenPaused)
-                    .font(.dsBody)
-                hint("Выключено — остров на паузе остаётся, пока открыт источник (вкладка или приложение).")
+            Section {
+                slider("Выступ в покое", $settings.idleHeightExtra, SettingsMetrics.Range.idleHeightExtra)
+                slider("Сопряжение с экраном", $settings.fillet, SettingsMetrics.Range.fillet)
+            } header: {
+                Text("Форма выреза")
             }
 
-            section("Внешний API") {
-                Toggle("Разрешить внешний API (Live Activity)", isOn: $settings.allowExternalAPI)
-                    .font(.dsBody)
-                hint("Скрипты и CI показывают прогресс в острове через tools/island. Только 127.0.0.1:47810, по токену.")
+            Section("Наведение и анимация") {
+                slider("Прирост ширины", $settings.peekWidthGrowth, SettingsMetrics.Range.peekWidthGrowth)
+                slider("Прирост высоты", $settings.peekHeightGrowth, SettingsMetrics.Range.peekHeightGrowth)
+                slider("Длительность анимации, с", $settings.animationDuration,
+                       SettingsMetrics.Range.animationDuration, decimals: SettingsMetrics.fractionDigits)
             }
 
-            section("Экран острова") {
-                Picker("Экран острова", selection: $settings.displayPolicy) {
-                    Text("Основной (экран со строкой меню)").tag(IslandDisplayPolicy.primary)
-                    Text("Встроенный с вырезом").tag(IslandDisplayPolicy.builtIn)
-                }
-                .font(.dsBody)
-                hint("«Встроенный» без встроенного экрана (крышка закрыта) — как «Основной». Без выреза остров рисует свой, высотой со строку меню.")
+            Section {
+                slider("Ширина карточки", $settings.lockScreenWidth, SettingsMetrics.Range.lockScreenWidth)
+                slider("Обложка развёрнутая", $settings.lockScreenArtSize, SettingsMetrics.Range.lockScreenArtSize)
+            } header: {
+                Text("Экран блокировки")
             }
 
-            section("Оформление окна") {
+            Section {
                 Toggle("Тень окна", isOn: $settings.showShadow)
-                    .font(.dsBody)
+            } header: {
+                Text("Окно")
+            } footer: {
                 hint("Выключена — остров сливается с чёрной рамкой экрана.")
-            }
-
-            section("Меню-бар") {
-                Toggle("Значок в меню-баре", isOn: $settings.showStatusIcon)
-                    .font(.dsBody)
-                hint("Если выключить, настройки открываются повторным запуском приложения из «Программ».")
             }
         }
     }
 
     // MARK: - Building blocks
 
-    @ViewBuilder
-    private func section<Content: View>(
-        _ title: String,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 9) {
-            Text(title)
-                .font(.dsLabel)
-                .foregroundColor(.secondary)
-                .textCase(.uppercase)
-            content()
-        }
-    }
-
     private func hint(_ text: String) -> some View {
         Text(text)
             .font(.dsCaption)
-            .foregroundColor(.secondary)
+            .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func minutesPicker(_ label: String, _ value: Binding<Double>, options: [Double]) -> some View {
+        // A value saved by an older version that isn't in the list stays selectable.
+        let choices = options.contains(value.wrappedValue) ? options : (options + [value.wrappedValue]).sorted()
+        return Picker(label, selection: value) {
+            ForEach(choices, id: \.self) { minutes in
+                Text("\(Int(minutes)) мин").tag(minutes)
+            }
+        }
     }
 
     private func slider(
@@ -202,16 +413,14 @@ struct SettingsView: View {
         _ range: ClosedRange<Double>,
         decimals: Int = 0
     ) -> some View {
-        HStack(spacing: 10) {
+        HStack(spacing: DS.Space.l) {
             Text(label)
-                .font(.dsBody)
-                .frame(width: 160, alignment: .leading)
+                .frame(width: SettingsMetrics.labelColumn, alignment: .leading)
             Slider(value: value, in: range)
             Text(String(format: "%.\(decimals)f", value.wrappedValue))
                 .font(.dsCaption)
-                .monospacedDigit()
-                .foregroundColor(.secondary)
-                .frame(width: 42, alignment: .trailing)
+                .foregroundStyle(.secondary)
+                .frame(width: SettingsMetrics.valueColumn, alignment: .trailing)
         }
     }
 }
