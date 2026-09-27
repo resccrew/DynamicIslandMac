@@ -74,10 +74,20 @@ public enum CollapsedGeometry {
         bodyWidth(notchWidth: notchWidth) + peekGrowth
     }
 
-    /// Height of the row the ears' content is centred in: the *collapsed*
-    /// silhouette, never the peek one (peek adds height below, content stays).
-    public static func contentRowHeight(collapsedHeight: Double) -> Double {
-        collapsedHeight
+    /// Height of the row the ears' content is centred in: the notch itself —
+    /// not the collapsed silhouette (which is `Space.s` taller: a small lip
+    /// below the notch, unchanged in peek) and not the peek silhouette. On a
+    /// real notch the row therefore sits exactly under the camera cutout.
+    public static func contentRowHeight(notchHeight: Double) -> Double {
+        notchHeight
+    }
+
+    /// Visual size of the leading slot (cover art / app icon) in an ear,
+    /// scaled to the notch: comfortably inside it with `Space.s` of breathing
+    /// room top and bottom, so a taller notch reads a proportionally bigger
+    /// slot instead of the same fixed size everywhere.
+    public static func earIconSlot(notchHeight: Double) -> Double {
+        max(0, notchHeight - 2 * DS.Space.s)
     }
 
     /// Bottom radius by state: half the height for the collapsed pill and

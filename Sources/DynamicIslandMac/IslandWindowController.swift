@@ -177,13 +177,22 @@ final class IslandWindowController: NSWindowController {
 
     /// Fixed frame pinned to the top-center of the display; only the SwiftUI
     /// shape inside changes size.
+    ///
+    /// The island only ever lives on a notched display — with the lid closed
+    /// or just an external monitor connected, there is no such screen, and
+    /// the panel is hidden entirely (not moved to some other display) rather
+    /// than showing a fake notch it was never designed to sit under.
     private func positionContainer() {
         guard let panel = window else { return }
-        guard let screen = IslandDisplay.screen else { return }
+        guard let screen = IslandDisplay.screen else {
+            panel.orderOut(nil)
+            return
+        }
         refreshNotch(for: screen)
         let size = settings.containerSize(notch: model.notchSize, hasNotch: model.hasNotch)
         let origin = DisplayGeometry.panelOrigin(containerSize: size, on: IslandDisplay.info(for: screen))
         let frame = NSRect(origin: origin, size: size)
+        if !panel.isVisible { panel.orderFrontRegardless() }
         guard frame != panel.frame else { return }
         panel.setFrame(frame, display: true)
     }

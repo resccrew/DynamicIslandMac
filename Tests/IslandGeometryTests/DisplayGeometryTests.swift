@@ -47,49 +47,42 @@ final class DisplayGeometryTests: XCTestCase {
         XCTAssertLessThanOrEqual(size.width, tiny.frame.width)
     }
 
+    /// Replaces `IslandDisplayPolicy` (removed): the island now only ever
+    /// lives on a display with a real camera notch — a policy choice between
+    /// "primary" and "built-in" no longer applies, since a non-notched
+    /// display, primary or not, is never a candidate.
     func testOnlyBuiltIn() {
         var only = builtIn
         only.isPrimary = true
-        for policy in IslandDisplayPolicy.allCases {
-            XCTAssertEqual(DisplayGeometry.preferredDisplay(among: [only], policy: policy), 0)
-        }
+        XCTAssertEqual(DisplayGeometry.preferredNotchedDisplay(among: [only]), 0)
     }
 
-    func testBuiltInPlusPrimaryExternal() {
+    func testBuiltInPlusPrimaryExternalPicksTheNotchedOne() {
         let displays = [external(), builtIn]
-        XCTAssertEqual(DisplayGeometry.preferredDisplay(among: displays, policy: .primary), 0)
-        XCTAssertEqual(DisplayGeometry.preferredDisplay(among: displays, policy: .builtIn), 1)
+        XCTAssertEqual(DisplayGeometry.preferredNotchedDisplay(among: displays), 1)
     }
 
-    func testLidClosedOnlyExternal() {
+    /// Lid closed, external monitor only: no notched display anywhere, so the
+    /// island is hidden — it never falls back to the external screen the old
+    /// "primary" policy would have picked.
+    func testLidClosedOnlyExternalIsNil() {
         let displays = [external()]
-        for policy in IslandDisplayPolicy.allCases {
-            XCTAssertEqual(DisplayGeometry.preferredDisplay(among: displays, policy: policy), 0)
-        }
+        XCTAssertNil(DisplayGeometry.preferredNotchedDisplay(among: displays))
     }
 
-    func testBuiltInPolicyWithoutBuiltInFallsBackToPrimary() {
+    func testTwoNonNotchedExternalsAreBothNil() {
         let displays = [external(x: 1920, primary: false), external(primary: true)]
-        XCTAssertEqual(DisplayGeometry.preferredDisplay(among: displays, policy: .builtIn), 1)
+        XCTAssertNil(DisplayGeometry.preferredNotchedDisplay(among: displays))
     }
 
     func testEmptyListIsNil() {
-        XCTAssertNil(DisplayGeometry.preferredDisplay(among: [], policy: .primary))
-        XCTAssertNil(DisplayGeometry.preferredDisplay(among: [], policy: .builtIn))
+        XCTAssertNil(DisplayGeometry.preferredNotchedDisplay(among: []))
     }
 
     func testPanelOriginTopCentreWithNegativeOrigin() {
         let left = external(x: -1920, y: 100, primary: false)
         let origin = DisplayGeometry.panelOrigin(containerSize: CGSize(width: 400, height: 200), on: left)
         XCTAssertEqual(origin, CGPoint(x: -960 - 200, y: 1180 - 200))
-    }
-
-    func testStoredPolicyDecoding() {
-        XCTAssertEqual(IslandDisplayPolicy(stored: "automatic"), .primary)
-        XCTAssertEqual(IslandDisplayPolicy(stored: "garbage"), .primary)
-        XCTAssertEqual(IslandDisplayPolicy(stored: nil), .primary)
-        XCTAssertEqual(IslandDisplayPolicy(stored: "builtIn"), .builtIn)
-        XCTAssertEqual(IslandDisplayPolicy(stored: "primary"), .primary)
     }
 
     func testDockOnLeftOrBottomDoesNotChangeMenuBarHeight() {
@@ -111,9 +104,9 @@ final class DisplayGeometryTests: XCTestCase {
         XCTAssertEqual(origin, CGPoint(x: 1160 - 200, y: 2160 - 200))
     }
 
-    func testBuiltInPolicyPicksNonPrimaryNotchedBuiltIn() {
+    func testNotchedBuiltInWinsOverNonNotchedPrimary() {
         let displays = [external(primary: true), builtIn]
-        guard let index = DisplayGeometry.preferredDisplay(among: displays, policy: .builtIn) else {
+        guard let index = DisplayGeometry.preferredNotchedDisplay(among: displays) else {
             return XCTFail("expected a display")
         }
         XCTAssertEqual(index, 1)

@@ -1,19 +1,5 @@
 import CoreGraphics
 
-/// Which display the island lives on when more than one is connected.
-public enum IslandDisplayPolicy: String, CaseIterable, Sendable {
-    /// The display with the menu bar — where the user is looking.
-    case primary
-    /// The notched built-in panel when present, otherwise the primary display.
-    case builtIn
-
-    /// Decodes a stored value; the legacy "automatic" and anything unknown
-    /// mean `.primary`.
-    public init(stored raw: String?) {
-        self = raw.flatMap(Self.init(rawValue:)) ?? .primary
-    }
-}
-
 /// A display reduced to the numbers the island needs. Built from `NSScreen`
 /// by the app; plain values here so the logic is testable without AppKit.
 public struct DisplayInfo: Equatable, Sendable {
@@ -94,18 +80,14 @@ public enum DisplayGeometry {
         return min(1, max(0, rowHeight - inset * 2) / contentHeight)
     }
 
-    /// Index of the display to host the island, or nil when there are none.
-    /// Falls back to the first display if none claims to be primary, which
-    /// matches `NSScreen.screens.first` owning the menu bar.
-    public static func preferredDisplay(among displays: [DisplayInfo], policy: IslandDisplayPolicy) -> Int? {
-        guard !displays.isEmpty else { return nil }
-        let primary = displays.firstIndex(where: \.isPrimary) ?? 0
-        switch policy {
-        case .primary:
-            return primary
-        case .builtIn:
-            return displays.firstIndex(where: \.isBuiltIn) ?? primary
-        }
+    /// Index of the display to host the island: the island only ever lives on
+    /// a display with a real camera notch — never a virtual one — so with no
+    /// notched display connected (lid closed, external monitor only) this is
+    /// nil and the island is hidden entirely rather than falling back to some
+    /// other screen. The built-in notched panel wins if more than one notched
+    /// display is somehow present.
+    public static func preferredNotchedDisplay(among displays: [DisplayInfo]) -> Int? {
+        displays.firstIndex { $0.hasNotch && $0.isBuiltIn } ?? displays.firstIndex(where: \.hasNotch)
     }
 
     /// Bottom-left origin (AppKit coordinates) that pins a container of `size`
