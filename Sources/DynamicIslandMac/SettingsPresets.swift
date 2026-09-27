@@ -1,4 +1,5 @@
 import Foundation
+import IslandLogic
 
 /// Presets only set values that already exist in `IslandSettings`; there is no
 /// separate stored "preset" — the picker shows whichever preset the current
@@ -20,12 +21,15 @@ enum IslandSizePreset: CaseIterable, Identifiable {
         }
     }
 
-    /// Width of the expanded card.
+    /// Width of the expanded card. «Стандартный» is the default, where the
+    /// open card is exactly as wide as the hovered island; the others step
+    /// one spacing unit narrower or wider.
     var expandedWidth: Double {
+        let standard = IslandSettings.Defaults.expandedWidth
         switch self {
-        case .compact: return 260
-        case .standard: return IslandSettings.Defaults.expandedWidth
-        case .large: return 320
+        case .compact: return standard - DS.Space.xl
+        case .standard: return standard
+        case .large: return standard + DS.Space.cardSide
         }
     }
 
