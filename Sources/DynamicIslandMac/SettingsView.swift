@@ -27,7 +27,7 @@ enum SettingsMetrics {
     /// Slider rows: label column, value column.
     static let labelColumn: CGFloat = 200
     static let valueColumn: CGFloat = 44
-    static let segmentedWidth: CGFloat = 220
+    static let exampleCommand = "island push --id build --title \"Сборка\" --progress 0.4"
 
     static let leadMinutes: [Double] = [1, 2, 5, 10, 15, 30]
     static let keepAwakeMinutes: [Double] = [5, 10, 15, 30, 60]
@@ -50,6 +50,7 @@ struct SettingsView: View {
     @State private var loginState = LaunchAtLogin.state
     @State private var loginError: String?
     @State private var tokenCopied = false
+    @State private var exampleCopied = false
     @State private var confirmsReset = false
 
     var body: some View {
@@ -205,12 +206,13 @@ struct SettingsView: View {
             Section {
                 Toggle("Разрешить скриптам показывать прогресс", isOn: $settings.allowExternalAPI)
                 if settings.allowExternalAPI {
+                    Button(exampleCopied ? "Пример скопирован" : "Скопировать пример команды") { copyExample() }
                     Button(tokenCopied ? "Токен скопирован" : "Скопировать токен") { copyToken() }
                 }
             } header: {
                 Text("Скрипты")
             } footer: {
-                hint("Только с этого Mac и только с токеном. Команда island из папки tools.")
+                hint("Скрипты и сборки смогут показывать прогресс в острове. Доступ только с этого Mac, по токену.")
             }
         }
     }
@@ -222,15 +224,27 @@ struct SettingsView: View {
         title: KeyPath<Preset, String>,
         apply: @escaping (Preset) -> Void
     ) -> some View {
-        Picker(label, selection: Binding<Preset?>(get: { selected }, set: { $0.map(apply) })) {
-            ForEach(presets) { preset in
-                Text(preset[keyPath: title]).tag(Optional(preset))
+        // Same label column as the sliders, so every control starts at one x and has one width.
+        HStack(spacing: DS.Space.l) {
+            Text(label)
+                .frame(width: SettingsMetrics.labelColumn, alignment: .leading)
+            Picker(label, selection: Binding<Preset?>(get: { selected }, set: { $0.map(apply) })) {
+                ForEach(presets) { preset in
+                    Text(preset[keyPath: title]).tag(Optional(preset))
+                }
+                if selected == nil {
+                    Text("Другой").tag(nil as Preset?)
+                }
             }
-            if selected == nil {
-                Text("Другой").tag(nil as Preset?)
-            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
         }
-        .pickerStyle(.segmented)
+    }
+
+    private func copyExample() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(SettingsMetrics.exampleCommand, forType: .string)
+        exampleCopied = true
     }
 
     private func copyToken() {
@@ -245,7 +259,7 @@ struct SettingsView: View {
     private var calendar: some View {
         Group {
             Section {
-                Toggle("События календаря", isOn: $settings.calendarEnabled)
+                Toggle("Показывать события", isOn: $settings.calendarEnabled)
                 if settings.calendarEnabled {
                     minutesPicker("Напоминать о событии за", $settings.eventLeadMinutes,
                                   options: SettingsMetrics.leadMinutes)
@@ -258,7 +272,7 @@ struct SettingsView: View {
             }
 
             Section {
-                Toggle("Напоминания", isOn: $settings.remindersEnabled)
+                Toggle("Показывать напоминания", isOn: $settings.remindersEnabled)
                 if settings.remindersEnabled {
                     accessRow(agenda.remindersAccess, kind: .reminders)
                 }
@@ -314,7 +328,7 @@ struct SettingsView: View {
                     Text("Тёмная").tag(false)
                 }
                 .pickerStyle(.segmented)
-                slider("Положение по вертикали", $settings.lockScreenOffsetY, SettingsMetrics.Range.lockScreenOffsetY)
+                positionSlider
             } header: {
                 Text("Карточка")
             } footer: {
@@ -324,7 +338,7 @@ struct SettingsView: View {
             Section {
                 Toggle("Показывать текст песни", isOn: $settings.lyricsEnabled)
             } header: {
-                Text("Текст песни")
+                Text("Тексты песен")
             } footer: {
                 hint("Тексты берутся с lrclib.net: туда уходят название трека и исполнитель.")
             }
@@ -394,6 +408,17 @@ struct SettingsView: View {
             ForEach(choices, id: \.self) { minutes in
                 Text("\(Int(minutes)) мин").tag(minutes)
             }
+        }
+    }
+
+    /// The card's vertical position, said in words at the ends instead of a raw offset.
+    private var positionSlider: some View {
+        HStack(spacing: DS.Space.l) {
+            Text("Положение по вертикали")
+                .frame(width: SettingsMetrics.labelColumn, alignment: .leading)
+            Text("Выше").font(.dsCaption).foregroundStyle(.secondary)
+            Slider(value: $settings.lockScreenOffsetY, in: SettingsMetrics.Range.lockScreenOffsetY)
+            Text("Ниже").font(.dsCaption).foregroundStyle(.secondary)
         }
     }
 

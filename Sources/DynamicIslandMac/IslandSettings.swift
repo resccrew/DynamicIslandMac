@@ -141,6 +141,9 @@ final class IslandSettings: ObservableObject {
 
     private var isLoading = true
 
+    private static let legacyPeekWidthGrowth = 18.0
+    private static let legacyPeekHeightGrowth = 5.0
+
     private init() {
         collapsedWidth = Self.read("collapsedWidth", Defaults.collapsedWidth)
         collapsedHeight = Self.read("collapsedHeight", Defaults.collapsedHeight)
@@ -163,8 +166,14 @@ final class IslandSettings: ObservableObject {
         titleFontSize = Self.read("titleFontSize", Defaults.titleFontSize)
         artistFontSize = Self.read("artistFontSize", Defaults.artistFontSize)
 
-        peekWidthGrowth = Self.read("peekWidthGrowth", Defaults.peekWidthGrowth)
-        peekHeightGrowth = Self.read("peekHeightGrowth", Defaults.peekHeightGrowth)
+        // Older builds saved their own default (18/5); move it to the current default so the
+        // «Лёгкая» preset matches. Values the user changed by hand are left alone.
+        let savedPeekWidth = Self.read("peekWidthGrowth", Defaults.peekWidthGrowth)
+        let savedPeekHeight = Self.read("peekHeightGrowth", Defaults.peekHeightGrowth)
+        let isLegacyPeek = abs(savedPeekWidth - Self.legacyPeekWidthGrowth) < 0.001
+            && abs(savedPeekHeight - Self.legacyPeekHeightGrowth) < 0.001
+        peekWidthGrowth = isLegacyPeek ? Defaults.peekWidthGrowth : savedPeekWidth
+        peekHeightGrowth = isLegacyPeek ? Defaults.peekHeightGrowth : savedPeekHeight
         animationDuration = Self.read("animationDuration", Defaults.animationDuration)
         showShadow = UserDefaults.standard.object(forKey: "showShadow") as? Bool ?? Defaults.showShadow
         idleHeightExtra = Self.read("idleHeightExtra", Defaults.idleHeightExtra)

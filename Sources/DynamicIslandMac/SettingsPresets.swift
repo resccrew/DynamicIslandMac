@@ -23,9 +23,9 @@ enum IslandSizePreset: CaseIterable, Identifiable {
     /// Width of the expanded card.
     var expandedWidth: Double {
         switch self {
-        case .compact: return 260
-        case .standard: return IslandSettings.Defaults.expandedWidth
-        case .large: return 320
+        case .compact: return 318
+        case .standard: return 336
+        case .large: return 360
         }
     }
 
