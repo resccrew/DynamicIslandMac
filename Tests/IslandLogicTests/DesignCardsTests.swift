@@ -28,15 +28,15 @@ final class DesignCardsTests: XCTestCase {
     }
 
     func testAgendaFitsThePanel() {
-        // Header row + section gap + 3 event rows (body text ≈ 15pt) + 3
-        // reminder rows (28pt hit-frame) + 5 row gaps + margins under a
-        // 38pt cutout.
-        let header = DS.Button.primary
-        let events = 3 * 15.0
-        let reminders = 3 * DS.Button.secondaryHitFrame
-        let gaps = 5 * DS.Space.rowGap
-        let total = 38 + DS.Space.cardTopBelowNotch + header + DS.Space.sectionGap
-            + events + reminders + gaps + DS.Space.cardBottom
+        // Cutout 38 + top gap + header + sectionGap, then events (3 rows of
+        // xl height, rowGap between), sectionGap, the "Напоминания" caption
+        // (≈13pt) + rowGap + 3 rows, and the bottom margin.
+        let row = DS.Space.xl
+        let events = 3 * row + 2 * DS.Space.rowGap
+        let caption = 13.0
+        let reminders = caption + DS.Space.rowGap + 3 * row + 2 * DS.Space.rowGap
+        let total = 38 + DS.Space.cardTopBelowNotch + DS.Button.primary + DS.Space.sectionGap
+            + events + DS.Space.sectionGap + reminders + DS.Space.cardBottom
         XCTAssertLessThanOrEqual(total, DS.Card.maxExpandedHeight)
     }
 
