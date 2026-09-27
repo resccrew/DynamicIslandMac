@@ -487,6 +487,7 @@ final class DebugControlServer {
             "settings": [
                 "collapsedWidth": settings.collapsedWidth,
                 "collapsedHeight": settings.collapsedHeight,
+                "earWidth": settings.earWidth,
                 "expandedWidth": settings.expandedWidth,
                 "expandedHeight": settings.expandedHeight,
                 "fillet": settings.fillet,

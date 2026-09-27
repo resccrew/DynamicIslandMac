@@ -194,6 +194,7 @@ struct IslandView: View {
         let ear = CollapsedGeometry.earWidth(
             islandWidth: islandSize.width, fillet: settings.fillet, notchWidth: notch.width
         )
+        let baseEarWidth = Double(settings.earWidth)
         let rowHeight = collapsedRowHeight
         // A menu-bar-high island (no hardware notch) can be shorter than the
         // ear slot; shrink the ears' content and inset to fit, centred.
@@ -204,7 +205,7 @@ struct IslandView: View {
             contentHeight: max(earIconSlot, DS.Icon.earSlot),
             inset: DS.Space.xxs
         )
-        let inset = CollapsedGeometry.contentInset(earWidth: ear) * scale
+        let inset = CollapsedGeometry.contentInset(earWidth: ear, baseEarWidth: baseEarWidth) * scale
         return HStack(spacing: 0) {
             // Measured before padding and framing: the drawn content itself,
             // which can overflow its ear if it doesn't fit.
@@ -249,13 +250,15 @@ struct IslandView: View {
         }
     }
 
-    /// Ticks on its own, like `callDuration`, in the shared ear font.
+    /// Ticks on its own, like `callDuration`, in the shared ear font. Steps
+    /// down to whole minutes (`EarText.duration`) if the full "H:MM:SS" is
+    /// too wide for the current ear width, instead of clipping it.
     private func callEarDuration(_ call: CallInfo) -> some View {
         TimelineView(.periodic(from: call.startedAt, by: 1)) { context in
-            Text(formatTime(context.date.timeIntervalSince(call.startedAt)))
+            Text(EarText.duration(context.date.timeIntervalSince(call.startedAt), earWidth: settings.earWidth))
                 .font(.dsEar)
                 .foregroundStyle(Accent.callGreen)
-                .fitsEar()
+                .fitsEar(earWidth: settings.earWidth)
         }
     }
 
@@ -320,10 +323,10 @@ struct IslandView: View {
         earsRow(dimmed: model.isTimerPaused) {
             EarSymbol(name: model.isTimerPaused ? "pause.fill" : "timer", tint: Accent.timerOrange)
         } trailing: {
-            Text(formatCountdown(model.timerRemaining ?? 0))
+            Text(EarText.duration(model.timerRemaining ?? 0, earWidth: settings.earWidth))
                 .font(.dsEar)
                 .foregroundStyle(Accent.timerOrange)
-                .fitsEar()
+                .fitsEar(earWidth: settings.earWidth)
         }
     }
 
@@ -383,7 +386,7 @@ struct IslandView: View {
             Text(agendaCollapsedTime)
                 .font(.dsEar)
                 .foregroundStyle(agendaEarAccent)
-                .fitsEar()
+                .fitsEar(earWidth: settings.earWidth)
         }
     }
 
@@ -404,7 +407,8 @@ struct IslandView: View {
         if let event = model.agenda.nowEvent {
             return EarText.agenda(
                 AgendaFormat.collapsedLabel(start: event.start, end: event.end, now: Date()),
-                clock: IslandViewModel.clock
+                clock: IslandViewModel.clock,
+                earWidth: settings.earWidth
             )
         }
         if let due = model.agenda.nowReminder?.due { return IslandViewModel.clock(due) }

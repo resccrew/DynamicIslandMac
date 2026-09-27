@@ -28,10 +28,12 @@ struct EarSymbol: View {
 extension View {
     /// Keeps an ear's text inside the ear: it shrinks (never below
     /// `CollapsedGeometry.minTextScale`) rather than sliding under the camera.
-    func fitsEar() -> some View {
+    /// `earWidth` is the live setting (`IslandSettings.earWidth`) — the
+    /// compact preset leaves noticeably less room than the default.
+    func fitsEar(earWidth: Double) -> some View {
         self
             .lineLimit(1)
             .minimumScaleFactor(CollapsedGeometry.minTextScale)
-            .frame(maxWidth: CollapsedGeometry.contentWidth)
+            .frame(maxWidth: CollapsedGeometry.contentWidth(earWidth: earWidth))
     }
 }

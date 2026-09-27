@@ -15,6 +15,12 @@ final class IslandSettings: ObservableObject {
     @Published var expandedWidth: Double { didSet { persist() } }
     @Published var expandedHeight: Double { didSet { persist() } }
 
+    /// Width of one ear (media/timer/call/agenda/activity alike), the
+    /// «Размер» preset's real lever: it drives the collapsed and peek widths
+    /// directly, and `expandedWidth` is derived from it (see
+    /// `IslandSizePreset`), so this single value is what makes the preset
+    /// visibly change the resting island, not just the opened card.
+    @Published var earWidth: Double { didSet { persist() } }
     @Published var fillet: Double { didSet { persist() } }
     @Published var collapsedBottomRadius: Double { didSet { persist() } }
     @Published var expandedBottomRadius: Double { didSet { persist() } }
@@ -92,9 +98,11 @@ final class IslandSettings: ObservableObject {
         static let collapsedWidth = 280.0
         static let collapsedHeight = 38.0
         /// Equals the peek width on the reference (virtual) notch: 190 + 128 + 16.
+        static let earWidth = DS.Ear.width
         static let expandedWidth = CollapsedGeometry.expandedWidth(
             notchWidth: DisplayGeometry.virtualNotchWidth,
-            peekGrowth: CollapsedGeometry.defaultPeekWidthGrowth
+            peekGrowth: CollapsedGeometry.defaultPeekWidthGrowth,
+            earWidth: earWidth
         )
         /// The default before the card matched the peek; stored copies of it
         /// migrate to the new default.
@@ -208,6 +216,8 @@ final class IslandSettings: ObservableObject {
         // An install that already has saved settings is not a first launch.
         hasCompletedOnboarding = UserDefaults.standard.object(forKey: "hasCompletedOnboarding") as? Bool
             ?? (UserDefaults.standard.object(forKey: "collapsedWidth") != nil)
+        earWidth = Self.read("earWidth", Defaults.earWidth)
+
         // `displayPolicy` is gone: the island now only ever lives on the
         // built-in notched panel (see DESIGN-DECISIONS.md), so any stored
         // value is simply ignored — no migration is needed.
@@ -225,7 +235,7 @@ final class IslandSettings: ObservableObject {
     /// collapsed layout; they stay only so stored preferences still load.
     func collapsedWindowSize(notch: CGSize) -> CGSize {
         CGSize(
-            width: CollapsedGeometry.windowWidth(notchWidth: notch.width, fillet: fillet),
+            width: CollapsedGeometry.windowWidth(notchWidth: notch.width, fillet: fillet, earWidth: earWidth),
             height: CollapsedGeometry.height(notchHeight: notch.height)
         )
     }
@@ -328,6 +338,7 @@ final class IslandSettings: ObservableObject {
         isLoading = true
         collapsedWidth = Defaults.collapsedWidth
         collapsedHeight = Defaults.collapsedHeight
+        earWidth = Defaults.earWidth
         expandedWidth = Defaults.expandedWidth
         expandedHeight = Defaults.expandedHeight
         fillet = Defaults.fillet
@@ -377,6 +388,7 @@ final class IslandSettings: ObservableObject {
         let d = UserDefaults.standard
         d.set(collapsedWidth, forKey: "collapsedWidth")
         d.set(collapsedHeight, forKey: "collapsedHeight")
+        d.set(earWidth, forKey: "earWidth")
         d.set(expandedWidth, forKey: "expandedWidth")
         d.set(expandedHeight, forKey: "expandedHeight")
         d.set(fillet, forKey: "fillet")

@@ -27,7 +27,7 @@ final class CollapsedWidthTests: XCTestCase {
     }
 
     func testContentFitsTheEarMinusItsInset() {
-        XCTAssertEqual(CollapsedGeometry.contentWidth, DS.Ear.width - DS.Ear.inset - CollapsedGeometry.notchGap)
+        XCTAssertEqual(CollapsedGeometry.contentWidth(), DS.Ear.width - DS.Ear.inset - CollapsedGeometry.notchGap)
     }
 }
 
@@ -204,8 +204,8 @@ final class EarTextTests: XCTestCase {
     }
 
     func testMostLabelsNeedNoScalingAtAll() {
-        XCTAssertLessThanOrEqual(EarText.estimatedWidth("28 мин"), CollapsedGeometry.contentWidth)
-        XCTAssertLessThanOrEqual(EarText.estimatedWidth("1:02:05"), CollapsedGeometry.contentWidth)
+        XCTAssertLessThanOrEqual(EarText.estimatedWidth("28 мин"), CollapsedGeometry.contentWidth())
+        XCTAssertLessThanOrEqual(EarText.estimatedWidth("1:02:05"), CollapsedGeometry.contentWidth())
     }
 }
 
@@ -223,7 +223,7 @@ final class RoundThreeTests: XCTestCase {
 
     func testEarContentKeepsSixPointsFromTheNotch() {
         // Outer inset + content + gap fill exactly the ear.
-        XCTAssertEqual(DS.Ear.inset + CollapsedGeometry.contentWidth + CollapsedGeometry.notchGap, DS.Ear.width)
+        XCTAssertEqual(DS.Ear.inset + CollapsedGeometry.contentWidth() + CollapsedGeometry.notchGap, DS.Ear.width)
         XCTAssertGreaterThanOrEqual(CollapsedGeometry.notchGap, 6)
     }
 
@@ -236,7 +236,7 @@ final class RoundThreeTests: XCTestCase {
     }
 
     func testCallLeadingGroupFitsWithCamera() {
-        XCTAssertLessThanOrEqual(CollapsedGeometry.callLeadingWidth(cameraOn: true), CollapsedGeometry.contentWidth)
+        XCTAssertLessThanOrEqual(CollapsedGeometry.callLeadingWidth(cameraOn: true), CollapsedGeometry.contentWidth())
         XCTAssertEqual(CollapsedGeometry.callLeadingWidth(cameraOn: false), DS.Icon.earSlot)
     }
 
