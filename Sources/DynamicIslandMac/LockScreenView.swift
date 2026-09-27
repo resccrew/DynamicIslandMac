@@ -90,8 +90,6 @@ struct LockScreenView: View {
                     titleBlock(alignment: .leading)
                     controlsRow
                 }
-
-                Spacer(minLength: 0)
             }
 
             progressRow
@@ -115,8 +113,10 @@ struct LockScreenView: View {
         }
     }
 
+    /// Spread across the full card width (same right edge as the progress
+    /// bar below), like the transport row on the island.
     private var controlsRow: some View {
-        HStack(spacing: DS.Space.xl) {
+        HStack(spacing: 0) {
             MediaButton(
                 systemName: "backward.end",
                 size: DS.Button.secondaryIconMin,
@@ -127,6 +127,8 @@ struct LockScreenView: View {
                 tint: palette.tint
             ) { model.skipPrevious() }
             .accessibilityLabel("Предыдущий трек")
+
+            Spacer(minLength: 0)
 
             Button {
                 model.togglePlayPause()
@@ -141,6 +143,8 @@ struct LockScreenView: View {
             .buttonStyle(MediaButtonStyle(diameter: DS.Button.primary, tint: palette.tint))
             .accessibilityLabel(model.isPlaying ? "Пауза" : "Воспроизвести")
 
+            Spacer(minLength: 0)
+
             MediaButton(
                 systemName: "forward.end",
                 size: DS.Button.secondaryIconMin,
@@ -152,6 +156,7 @@ struct LockScreenView: View {
             ) { model.skipNext() }
             .accessibilityLabel("Следующий трек")
         }
+        .frame(maxWidth: .infinity)
     }
 
     /// Elapsed, bar and remaining on one line — the island's progress row.
