@@ -33,20 +33,13 @@ enum SettingsMetrics {
     static let keepAwakeMinutes: [Double] = [5, 10, 15, 30, 60]
 
     enum Range {
-        static let expandedWidth = 260.0...900.0
         static let expandedBottomRadius = 0.0...70.0
         static let idleHeightExtra = 0.0...20.0
         static let fillet = 0.0...40.0
-        static let peekWidthGrowth = 0.0...80.0
-        static let peekHeightGrowth = 0.0...30.0
-        static let animationDuration = 0.12...0.7
         static let lockScreenWidth = 240.0...600.0
         static let lockScreenArtSize = 200.0...560.0
         static let lockScreenOffsetY = -350.0...350.0
     }
-
-    /// Slider value labels for the two curve exponents and the animation time.
-    static let fractionDigits = 2
 }
 
 struct SettingsView: View {
@@ -133,7 +126,7 @@ struct SettingsView: View {
             } header: {
                 Text("Строка меню")
             } footer: {
-                hint("Если выключить, настройки открываются повторным запуском приложения из «Программ».")
+                hint("Без значка настройки открываются повторным запуском приложения.")
             }
 
             Section {
@@ -141,7 +134,7 @@ struct SettingsView: View {
             } header: {
                 Text("Отклик")
             } footer: {
-                hint("Лёгкий тик трекпада, когда курсор касается острова. Работает на трекпадах Force Touch.")
+                hint("Лёгкий тик трекпада при касании острова. Только Force Touch.")
             }
 
             Section("О программе") {
@@ -167,7 +160,7 @@ struct SettingsView: View {
         if let loginError { return loginError }
         switch loginState {
         case .requiresApproval: return "Разрешите приложение в «Системные настройки → Основные → Объекты входа»."
-        case .unavailable: return "Работает только у установленного приложения из «Программ»."
+        case .unavailable: return "Работает только у установленного приложения."
         case .enabled, .disabled: return "Остров появится сам после включения Mac."
         }
     }
@@ -197,7 +190,7 @@ struct SettingsView: View {
             } header: {
                 Text("Где показывать")
             } footer: {
-                hint("Если встроенного экрана нет (крышка закрыта), остров переезжает на основной.")
+                hint("Без встроенного экрана остров переезжает на основной.")
             }
 
             Section {
@@ -206,7 +199,7 @@ struct SettingsView: View {
             } header: {
                 Text("Когда прятать остров")
             } footer: {
-                hint("На паузе остров остаётся, пока открыт источник (вкладка или приложение); в полноэкранном режиме исчезает и возвращается после выхода.")
+                hint("На паузе остров остаётся, пока открыт источник; в полноэкранном режиме прячется.")
             }
 
             Section {
@@ -217,7 +210,7 @@ struct SettingsView: View {
             } header: {
                 Text("Скрипты")
             } footer: {
-                hint("Только с этого Mac и только с токеном. Команда island из папки tools показывает сборку, тесты и другие задачи в острове.")
+                hint("Только с этого Mac и только с токеном. Команда island из папки tools.")
             }
         }
     }
@@ -261,7 +254,7 @@ struct SettingsView: View {
             } header: {
                 Text("Календарь")
             } footer: {
-                hint("Остров предупредит о ближайшей встрече и покажет кнопку «Подключиться», если в событии есть ссылка на созвон.")
+                hint("Предупредит о встрече и покажет «Подключиться», если есть ссылка на созвон.")
             }
 
             Section {
@@ -272,12 +265,15 @@ struct SettingsView: View {
             } header: {
                 Text("Напоминания")
             } footer: {
-                hint("Когда подходит срок, остров покажет напоминание с кнопкой «Выполнено».")
+                hint("Покажет напоминание, когда подойдёт срок, с кнопкой «Выполнено».")
             }
 
             Section {
+                LabeledContent("Источник", value: "Системные «Календарь» и «Напоминания»")
+            } header: {
+                Text("Данные")
             } footer: {
-                hint("Данные берутся из системных «Календаря» и «Напоминаний» (iCloud, Google, Exchange) и остаются на этом Mac. macOS спросит разрешение, когда вы включите функцию.")
+                hint("Данные остаются на этом Mac. macOS спросит доступ при включении.")
             }
         }
     }
@@ -311,7 +307,7 @@ struct SettingsView: View {
 
     private var lockScreen: some View {
         Group {
-            Section("Карточка") {
+            Section {
                 Toggle("Показывать на экране блокировки", isOn: $settings.lockScreenEnabled)
                 Picker("Тема", selection: $settings.lockCardLightTheme) {
                     Text("Светлая").tag(true)
@@ -319,14 +315,18 @@ struct SettingsView: View {
                 }
                 .pickerStyle(.segmented)
                 slider("Положение по вертикали", $settings.lockScreenOffsetY, SettingsMetrics.Range.lockScreenOffsetY)
+            } header: {
+                Text("Карточка")
+            } footer: {
+                hint("Клик по обложке увеличивает её.")
             }
 
             Section {
-                Toggle("Текст песни", isOn: $settings.lyricsEnabled)
+                Toggle("Показывать текст песни", isOn: $settings.lyricsEnabled)
             } header: {
                 Text("Текст песни")
             } footer: {
-                hint("Клик по обложке увеличивает её, кнопка «Текст» открывает текст песни. Тексты берутся с lrclib.net — туда уходят название трека и исполнитель.")
+                hint("Тексты берутся с lrclib.net: туда уходят название трека и исполнитель.")
             }
 
             Section {
@@ -338,7 +338,7 @@ struct SettingsView: View {
             } header: {
                 Text("Экран не гаснет")
             } footer: {
-                hint("По истечении времени экран гаснет сам, чтобы не тратить батарею.")
+                hint("По истечении времени экран гаснет сам, чтобы беречь батарею.")
             }
         }
     }
@@ -348,27 +348,13 @@ struct SettingsView: View {
     private var advanced: some View {
         Group {
             Section {
-            } footer: {
-                hint("Тонкая настройка формы. Обычно хватает пресетов на вкладке «Остров».")
-            }
-
-            Section("Развёрнутый вид") {
-                slider("Ширина", $settings.expandedWidth, SettingsMetrics.Range.expandedWidth)
                 slider("Нижний радиус", $settings.expandedBottomRadius, SettingsMetrics.Range.expandedBottomRadius)
-            }
-
-            Section {
                 slider("Выступ в покое", $settings.idleHeightExtra, SettingsMetrics.Range.idleHeightExtra)
                 slider("Сопряжение с экраном", $settings.fillet, SettingsMetrics.Range.fillet)
             } header: {
-                Text("Форма выреза")
-            }
-
-            Section("Наведение и анимация") {
-                slider("Прирост ширины", $settings.peekWidthGrowth, SettingsMetrics.Range.peekWidthGrowth)
-                slider("Прирост высоты", $settings.peekHeightGrowth, SettingsMetrics.Range.peekHeightGrowth)
-                slider("Длительность анимации, с", $settings.animationDuration,
-                       SettingsMetrics.Range.animationDuration, decimals: SettingsMetrics.fractionDigits)
+                Text("Остров")
+            } footer: {
+                hint("Тонкая настройка формы. Размер, наведение и анимация — на вкладке «Остров».")
             }
 
             Section {
@@ -376,6 +362,8 @@ struct SettingsView: View {
                 slider("Обложка развёрнутая", $settings.lockScreenArtSize, SettingsMetrics.Range.lockScreenArtSize)
             } header: {
                 Text("Экран блокировки")
+            } footer: {
+                hint("Размеры карточки. Положение задаётся на вкладке «Экран блокировки».")
             }
 
             Section {
@@ -394,6 +382,8 @@ struct SettingsView: View {
         Text(text)
             .font(.dsCaption)
             .foregroundStyle(.secondary)
+            .multilineTextAlignment(.leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .fixedSize(horizontal: false, vertical: true)
     }
 
