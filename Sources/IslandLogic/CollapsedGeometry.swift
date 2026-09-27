@@ -17,9 +17,10 @@ public enum CollapsedGeometry {
     /// promote to `DS` if other zones need it.
     public static let minTextScale: Double = 0.85
 
-    /// Height of the collapsed pill: the notch plus a `Space.s` lip below it.
+    /// Height of the collapsed pill: exactly the notch, so it never reaches
+    /// below the menu bar into the working area.
     public static func height(notchHeight: Double) -> Double {
-        notchHeight + DS.Space.s
+        notchHeight
     }
 
     /// Visible body width, fillets excluded: notch + one ear on each side.
