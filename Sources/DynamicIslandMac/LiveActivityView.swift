@@ -5,15 +5,12 @@ import SwiftUI
 /// places them itself: the collapsed ones go into its ears beside the camera,
 /// the expanded one into its shared card frame.
 enum LiveActivityParts {
-    static let defaultAccent = Color(red: 0.35, green: 0.62, blue: 1.0)
-    static let successGreen = Color(red: 0.19, green: 0.82, blue: 0.35)
-    static let failureRed = Color(red: 1.0, green: 0.30, blue: 0.27)
 
     static func accent(_ activity: LiveActivity) -> Color {
         switch activity.state {
-        case .success: return successGreen
-        case .failure: return failureRed
-        case .running: return activity.accentHex.flatMap(color(hex:)) ?? defaultAccent
+        case .success: return Accent.successGreen
+        case .failure: return Accent.failureRed
+        case .running: return activity.accentHex.flatMap(color(hex:)) ?? Accent.activityBlue
         }
     }
 
@@ -53,26 +50,23 @@ struct LiveActivityLeading: View {
 /// Progress ring, spinner while indeterminate, or the percentage when done.
 struct LiveActivityTrailing: View {
     let activity: LiveActivity
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         switch activity.state {
         case .running:
             if let progress = activity.progress {
                 ZStack {
-                    Circle().stroke(Color.white.opacity(.dsTrack), lineWidth: 2.5)
+                    Circle().stroke(Color.white.opacity(.dsTrack), lineWidth: DS.Icon.ringStroke.pt)
                     Circle()
                         .trim(from: 0, to: progress)
-                        .stroke(LiveActivityParts.accent(activity), style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                        .stroke(LiveActivityParts.accent(activity), style: StrokeStyle(lineWidth: DS.Icon.ringStroke.pt, lineCap: .round))
                         .rotationEffect(.degrees(-90))
-                        .animation(.easeOut(duration: 0.3), value: progress)
+                        .animation(.dsFade(reduceMotion: reduceMotion), value: progress)
                 }
-                .frame(width: 16, height: 16)
+                .frame(width: DS.Icon.ring.pt, height: DS.Icon.ring.pt)
             } else {
-                ProgressView()
-                    .progressViewStyle(.circular)
-                    .controlSize(.small)
-                    .tint(LiveActivityParts.accent(activity))
-                    .frame(width: 16, height: 16)
+                DSSpinner(tint: LiveActivityParts.accent(activity), reduceMotion: reduceMotion)
             }
         case .success, .failure:
             Text(activity.title)
@@ -86,50 +80,32 @@ struct LiveActivityTrailing: View {
 
 struct LiveActivityExpanded: View {
     let activity: LiveActivity
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         let accent = LiveActivityParts.accent(activity)
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 10) {
-                Image(systemName: LiveActivityParts.symbolName(activity))
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(accent)
-                    .frame(width: 28)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(activity.title)
-                        .font(.dsCardTitle)
-                        .foregroundStyle(.white)
-                        .lineLimit(1)
-                    if let subtitle = activity.subtitle {
-                        Text(subtitle)
-                            .font(.dsBody)
-                            .foregroundStyle(.white.opacity(.dsSecondary))
-                            .lineLimit(2)
-                    }
-                }
-                Spacer(minLength: 0)
-                if activity.state == .running, let progress = activity.progress {
+        let progress = activity.state == .running ? activity.progress : nil
+
+        VStack(alignment: .leading, spacing: DS.Space.sectionGap.pt) {
+            SymbolCardHeader(
+                symbolName: LiveActivityParts.symbolName(activity),
+                tint: accent,
+                title: activity.title,
+                subtitle: activity.subtitle
+            ) {
+                if let progress {
                     Text("\(Int((progress * 100).rounded()))%")
-                        .font(.dsEar)
+                        .font(.dsLabel.monospacedDigit())
                         .foregroundStyle(accent)
-                        .monospacedDigit()
                 }
             }
             if activity.state == .running {
-                if let progress = activity.progress {
-                    GeometryReader { proxy in
-                        ZStack(alignment: .leading) {
-                            Capsule().fill(Color.white.opacity(.dsTrack))
-                            Capsule().fill(accent).frame(width: proxy.size.width * progress)
-                        }
-                    }
-                    .frame(height: 4)
-                    .animation(.easeOut(duration: 0.3), value: progress)
-                } else {
-                    ProgressView()
-                        .progressViewStyle(.linear)
-                        .tint(accent)
-                }
+                DSProgressBar(
+                    mode: progress.map { .determinate(fraction: $0) } ?? .indeterminate,
+                    tint: accent,
+                    reduceMotion: reduceMotion
+                )
+                .animation(.dsFade(reduceMotion: reduceMotion), value: progress)
             }
         }
     }

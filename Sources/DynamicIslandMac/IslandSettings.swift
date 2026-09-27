@@ -1,3 +1,4 @@
+import IslandLogic
 import SwiftUI
 import Combine
 import IslandGeometry
@@ -266,7 +267,8 @@ final class IslandSettings: ObservableObject {
     }
 
     /// Height of the glance's own row, under the notch-tall strip.
-    let glanceBodyHeight: CGFloat = 46
+    /// One primary-button row plus the card's margins under the cutout and at the bottom.
+    let glanceBodyHeight: CGFloat = (DS.Space.cardTopBelowNotch + DS.Button.primary + DS.Space.cardBottom).pt
 
     /// Collapsed and peek sizes are capped to the menu bar on displays without
     /// a hardware notch (see `DisplayGeometry.collapsedIslandSize`).
