@@ -46,23 +46,21 @@ final class DesignCardsTests: XCTestCase {
     }
 }
 
-import AppKit
-
 final class GlanceWidthTests: XCTestCase {
     private let glanceWidth = 306.0
-    private let minimumTextWidth = 80.0
+    private let minimumTextWidth = 125.0
 
-    private func capsuleWidth(_ title: String) -> Double {
-        let font = NSFont.systemFont(ofSize: DS.TypeScale.label.size, weight: .semibold)
-        let text = (title as NSString).size(withAttributes: [.font: font]).width
-        return Double(text.rounded(.up)) + 2 * DS.Button.capsuleHorizontal
+    func testTextKeepsRoomBesideTheRoundActionButton() {
+        let beforeButton = glanceWidth - 2 * DS.Space.cardSide - DS.Card.headerIconColumn - DS.Space.leadGap
+        let room = beforeButton - DS.Space.leadGap - DS.Button.primary
+        XCTAssertGreaterThanOrEqual(room, minimumTextWidth)
     }
 
-    func testTextKeepsRoomBesideTheLongestButtons() {
-        let beforeButton = glanceWidth - 2 * DS.Space.cardSide - DS.Card.headerIconColumn - DS.Space.leadGap
-        for label in ["Подключиться", "Выполнено", "Открыть Часы", "Открыть"] {
-            let room = beforeButton - DS.Space.leadGap - capsuleWidth(label)
-            XCTAssertGreaterThanOrEqual(room, minimumTextWidth, label)
-        }
+    func testActionSymbols() {
+        XCTAssertEqual(GlanceActionSymbol.name(for: "Подключиться"), "video.fill")
+        XCTAssertEqual(GlanceActionSymbol.name(for: "Выполнено"), "checkmark")
+        XCTAssertEqual(GlanceActionSymbol.name(for: "Открыть Часы"), "clock")
+        XCTAssertEqual(GlanceActionSymbol.name(for: "Открыть"), "arrow.up.right")
+        XCTAssertEqual(GlanceActionSymbol.name(for: "что-то новое"), "arrow.up.right")
     }
 }
